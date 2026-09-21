@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Debugger · Sieve{% endblock %}
+
+{% block body %}
+<h1>Debugger</h1>
+<p class="lede">What the system currently believes about you, and what it did with that belief on the last render.</p>
+
+{% set d = diagnostics %}
+<div class="readout">
+  <div><b>{{ d.pool }}</b><small>candidates considered</small></div>
+  <div><b>{{ d.shown }}</b><small>survived</small></div>
+  <div class="warn"><b>{{ d.rejected_total }}</b><small>rejected</small></div>
+  <div><b>{{ (d.diversity * 100) | round | int }}%</b><small>diversity index</small></div>
+  <div><b>{{ d.model.samples }}</b><small>training samples</small></div>
+</div>
+
+<div class="cols-2">
+
+<section class="panel">
+  <h2>What it thinks you like</h2>
+  <p class="hint">Derived rows are recomputed from your watch history. Anything you edit here is pinned and will not be overwritten.</p>
+
+  <form id="add-interest" class="wrap-actions" style="margin-bottom:.8rem">
+    <input type="text" name="tag" placeholder="topic" style="max-width:14rem">
+    <input type="number" name="weight" value="0.8" step="0.1" min="-1" max="1" style="max-width:6rem">
+    <button class="btn ghost" type="submit">Add</button>
+    <button class="btn ghost" type="button" data-action="/api/interests" title="Rebuild derived interests">Rederive</button>
+  </form>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Topic</th><th>Confidence</th><th class="num">Weight</th><th>Source</th><th></th></tr></thead>
+    <tbody>
+      {% for item in interests %}
+        <tr data-tag="{{ item.tag }}">
+          <td>{{ item.tag }}</td>
+          <td>
+            <span class="meter" title="{{ item.confidence }}"><i style="width: {{ (item.confidence * 100) | round | int }}%"></i></span>
+            <span class="muted mono" style="font-size:.72rem">{{ item.band }}</span>
+          </td>
+          <td class="num" data-weight-cell>{{ "%.2f" | format(item.weight) }}</td>
+          <td><span class="tag {{ 'high' if item.pinned }}">{{ item.origin }}</span></td>
+          <td class="right">
+            <div class="wrap-actions" style="gap:.15rem;justify-content:flex-end">
+              <button class="btn ghost" style="font-size:.72rem;padding:.02rem .35rem" data-interest-action="set" data-weight="1">++</button>
+              <button class="btn ghost" style="font-size:.72rem;padding:.02rem .35rem" data-interest-action="set" data-weight="0.4">+</button>
+              <button class="btn ghost" style="font-size:.72rem;padding:.02rem .35rem" data-interest-action="set" data-weight="-0.6">−</button>
+              <button class="btn ghost" style="font-size:.72rem;padding:.02rem .35rem" data-interest-action="remove">×</button>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Nothing derived yet. Watch a few things, or import your history.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Why videos were hidden</h2>
+  <p class="hint">Usually the more useful question. Each row is a gate that fired on the last render.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th class="num">Count</th><th>Reason</th><th>For example</th></tr></thead>
+    <tbody>
+      {% for row in d.rejected %}
+        <tr>
+          <td class="num">{{ row.count }}</td>
+          <td>{{ row.reason }}</td>
+          <td class="muted" style="font-size:.78rem">{{ row.examples | join(" · ") | truncate(90) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">Nothing was filtered out.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if rule_summary %}
+    <h3>Active rule</h3>
+    <pre>{{ rule_summary }}</pre>
+  {% endif %}
+
+  {% if blocked %}
+    <h3>Blocklist</h3>
+    <ul class="muted" style="font-size:.82rem">
+      {% for row in blocked[:12] %}<li>{{ row.kind }}: {{ row.value }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+</div>
+
+<div class="cols-2">
+
+<section class="panel">
+  <h2>The learned model</h2>
+  <p class="hint">A logistic regression over {{ d.model.samples }} events. Being linear, these coefficients <em>are</em> the explanation — there is no second model approximating the first.</p>
+  {% if d.model.preferences %}
+    {% for pref in d.model.preferences %}
+      <div class="sparkrow">
+        <span>{{ pref.feature }}</span>
+        <span class="track"><i style="width: {{ (pref.weight | abs) * 60 }}%; background: {{ 'var(--teal)' if pref.direction == 'prefers' else 'var(--clay)' }}"></i></span>
+        <span class="val">{{ pref.weight }}</span>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">Not enough feedback yet. Use the more/less buttons on the homepage; twelve events is enough for the model to start counting.</p>
+  {% endif %}
+  <p class="wrap-actions">
+    <button class="btn ghost" type="button" data-action="/api/model/retrain">Retrain from history</button>
+    <button class="btn danger" type="button" data-action="/api/model/reset">Forget everything</button>
+  </p>
+</section>
+
+<section class="panel">
+  <h2>Ask why</h2>
+  <p class="hint">A plain-language read of the current configuration{% if cfg.llm_provider == 'none' %} (computed locally — no model is configured){% endif %}.</p>
+  <button class="btn ghost" id="critique" type="button">Explain my homepage</button>
+  <p id="critique-text" style="margin-top:.7rem"></p>
+
+  <h3>Topic mix on the last render</h3>
+  {% set total = d.topics | map(attribute=1) | sum %}
+  {% for topic, n in d.topics %}
+    <div class="sparkrow">
+      <span>{{ topic }}</span>
+      <span class="track"><i style="width: {{ (n / (total or 1) * 100) | round | int }}%"></i></span>
+      <span class="val">{{ n }}</span>
+    </div>
+  {% endfor %}
+</section>
+
+</div>
+
+<section class="panel">
+  <h2>Top ten, with their arithmetic</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Video</th><th class="num">Score</th><th>Breakdown</th></tr></thead>
+    <tbody>
+      {% for title, score, parts in sample %}
+        <tr>
+          <td>{{ title | truncate(70) }}</td>
+          <td class="num">{{ score }}</td>
+          <td>
+            {% for part in parts %}
+              <span class="tag">{{ part.percent }}% {{ part.label }}</span>
+            {% endfor %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a control, signal or integration.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things shape what gets built here: it has to run on a single
+        consumer machine, and it has to be explainable to the person using it.
+        A feature that needs a GPU on the request path, or that moves ranking
+        behind something the debugger cannot show, is a hard sell.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to control
+      description: The outcome you want, rather than the mechanism.
+    validations:
+      required: true
+
+  - type: textarea
+    id: existing
+    attributes:
+      label: Does something already do this
+      description: >
+        An existing project, API or dataset that solves part of it. Sieve
+        prefers wiring up a mature tool to writing a worse version of it —
+        DeArrow and SponsorBlock are there for exactly that reason.
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: What would it cost to run
+      description: >
+        Rough sense of CPU, memory, disk or network per video, if you know.
+        Anything that has to touch every candidate is the expensive case.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This can run without a GPU
+        - label: This can be explained to the user in the debugger
+        - label: This does not require a second daemon

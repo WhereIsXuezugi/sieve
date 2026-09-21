@@ -1,0 +1,94 @@
+[project]
+name = "sieve"
+version = "0.1.0"
+description = "A programmable recommendation layer for Invidious: source weights, per-video explanations, channel priority, and content scores you can read the arithmetic for."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+keywords = [
+  "invidious", "youtube", "recommendations", "recommender-system",
+  "explainable-ai", "sponsorblock", "dearrow", "self-hosted",
+  "content-filtering", "privacy",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Framework :: FastAPI",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+  "Topic :: Multimedia :: Video",
+]
+
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+# Only needed if you want real embeddings instead of the built-in hashed
+# TF-IDF vectors, or local NSFW frame scoring. Neither is required.
+embeddings = ["onnxruntime>=1.17", "tokenizers>=0.15"]
+vision = ["pillow>=10", "opennsfw2>=0.13"]
+dev = ["pytest>=8", "ruff>=0.3"]
+
+[project.urls]
+Homepage = "https://github.com/whereixuezugi/sieve"
+Documentation = "https://github.com/whereixuezugi/sieve/tree/main/docs"
+Source = "https://github.com/whereixuezugi/sieve"
+Issues = "https://github.com/whereixuezugi/sieve/issues"
+Changelog = "https://github.com/whereixuezugi/sieve/blob/main/CHANGELOG.md"
+
+[project.scripts]
+sieve = "sieve.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["sieve*"]
+
+[tool.setuptools.package-data]
+sieve = ["schema.sql", "templates/*.html", "static/*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# Pinned explicitly rather than left to the default, so that upgrading ruff
+# cannot silently turn CI red on code nobody touched.
+select = [
+  "E",    # pycodestyle
+  "F",    # pyflakes
+  "W",    # warnings
+  "I",    # import sorting
+  "UP",   # pyupgrade
+  "B",    # bugbear
+  "C4",   # comprehensions
+  "SIM",  # simplify
+  "RUF",  # ruff-specific
+]
+ignore = [
+  "E501",    # line length is handled by the formatter, not the linter
+  "SIM105",  # contextlib.suppress reads worse than try/except here
+  "B008",    # FastAPI's Form(...) and File(...) defaults are the framework's idiom
+  "RUF001",  # prose here uses real typography: en dashes and curly quotes stay
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately reach into private helpers to test them.
+"tests/*" = ["SLF001"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

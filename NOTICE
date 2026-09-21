@@ -1,0 +1,51 @@
+Sieve
+Copyright (C) 2025 the Sieve contributors
+
+Licensed under the GNU Affero General Public License, version 3 or later,
+matching Invidious, which this project is designed to run alongside.
+
+--------------------------------------------------------------------------------
+Third-party services and their terms
+
+Invidious                     AGPL-3.0
+  https://github.com/iv-org/invidious
+  Sieve consumes its public JSON API. It does not bundle or modify Invidious.
+
+SponsorBlock                  database: CC BY-NC-SA 4.0
+  https://sponsor.ajay.app
+  Segment data is queried by hash prefix and cached locally.
+
+DeArrow                       database: CC BY-NC-SA 4.0
+  https://dearrow.ajay.app
+  Crowd-voted titles and thumbnail timestamps, likewise by hash prefix.
+
+Sieve uses SponsorBlock and DeArrow data under those terms: it is a
+non-commercial personal tool, it attributes both projects in its interface and
+its documentation, and it does not redistribute their databases. A local cache
+of query results is kept for the operator's own use only.
+
+Anyone deploying Sieve commercially must review those terms independently; the
+non-commercial clause applies to the data, not to Sieve's own code.
+
+--------------------------------------------------------------------------------
+Runtime dependencies
+
+fastapi           MIT
+uvicorn           BSD-3-Clause
+httpx             BSD-3-Clause
+jinja2            BSD-3-Clause
+python-multipart  Apache-2.0
+
+Optional extras
+
+opennsfw2         MIT          (vision)
+pillow            MIT-CMU      (vision)
+onnxruntime       MIT          (embeddings)
+tokenizers        Apache-2.0   (embeddings)
+
+--------------------------------------------------------------------------------
+Typography
+
+The interface asks for IBM Plex Sans and IBM Plex Mono (SIL Open Font License
+1.1) and falls back to system fonts. Set `webfonts = false` to stop Sieve
+loading them from Google Fonts.

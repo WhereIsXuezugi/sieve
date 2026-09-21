@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Invidious
+    url: https://github.com/iv-org/invidious
+    about: Instance, player and API problems belong upstream, not here.
+  - name: SponsorBlock and DeArrow
+    url: https://github.com/ajayyy/SponsorBlock
+    about: Wrong titles or segment data come from their databases, not Sieve.

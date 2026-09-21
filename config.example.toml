@@ -1,0 +1,65 @@
+# Sieve configuration. Every key here can also be set as an environment
+# variable with a SIEVE_ prefix, e.g. SIEVE_INSTANCES, SIEVE_LLM_PROVIDER.
+# Copy to ~/.config/sieve/config.toml and edit.
+
+data_dir = "~/.local/share/sieve"
+host = "127.0.0.1"
+port = 8080
+
+# Your Invidious instance first. Extra entries are failover only — Sieve moves
+# down the list when one stops answering and stays on whichever worked last.
+instances = ["http://127.0.0.1:3000"]
+
+# Where the "Watch" links point. Usually your own instance.
+watch_base = "http://127.0.0.1:3000/watch?v="
+
+# Transcripts come from Invidious' caption endpoint. Turn this off on a very
+# small host: scoring falls back to metadata with lower confidence.
+use_transcripts = true
+transcript_max_chars = 20000
+
+# Background worker
+workers = 1
+score_batch = 40
+cache_ttl = 900
+catalog_ttl = 86400
+
+# ---------------------------------------------------------------------------
+# DeArrow and SponsorBlock
+# ---------------------------------------------------------------------------
+# Lookups always go out by 4-character sha256 prefix, so these servers cannot
+# tell which video you asked about. Point them at your own mirror if you run one.
+sponsorblock_url = "https://sponsor.ajay.app"
+dearrow_url = "https://sponsor.ajay.app"
+dearrow_thumbnail_url = "https://dearrow-thumb.ajay.app"
+community_ttl = 259200
+
+# Both are off by default. Turn them on from the Controls page, or here:
+#   they are user settings, not deployment settings, so the toggles live in the
+#   database — this file only decides which servers to ask.
+
+# ---------------------------------------------------------------------------
+# Similarity vectors
+# ---------------------------------------------------------------------------
+# "hashed" is pure Python with no model and no download, and is what the
+# benchmarks in the README assume. "ollama" or "openai" swap in real embeddings;
+# both cost roughly 8x the database size and need `sieve score --all` afterwards,
+# because stored vectors from one backend are meaningless to another.
+embed_provider = "hashed"        # hashed | ollama | openai
+embed_model = "nomic-embed-text"
+# embed_base_url = ""            # defaults to llm_base_url
+
+# ---------------------------------------------------------------------------
+# Language model (optional)
+# ---------------------------------------------------------------------------
+# Used only to compile a written brief into settings, and to answer "why am I
+# getting these videos". The ranking never calls it, so a small local model is
+# entirely sufficient. Set to "none" to use keyword matching instead.
+llm_provider = "none"          # none | ollama | openai | anthropic
+llm_model = "qwen2.5:7b-instruct"
+llm_base_url = "http://127.0.0.1:11434"
+# llm_api_key = ""
+
+# Serve IBM Plex from Google Fonts. Set false to stay fully offline; the UI
+# falls back to system fonts and looks fine.
+webfonts = true

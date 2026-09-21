@@ -1,0 +1,58 @@
+name: Bug report
+description: Something behaves differently from how it is documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, run `sieve doctor` — it catches the common causes of an
+        empty or wrong-looking homepage, and its output answers most of the
+        questions below at once.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: sieve doctor
+      description: >
+        Paste the output. Redact your instance URL if you would rather not
+        share it; everything else is counts and settings.
+      render: json
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.1.0, or a commit hash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it
+      options:
+        - pip install -e .
+        - Docker
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.3"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      render: shell

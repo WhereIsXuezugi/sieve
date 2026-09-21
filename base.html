@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Sieve{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+{% if cfg.webfonts %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+{% endif %}
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+
+<header class="masthead">
+  <a class="wordmark" href="/">sieve <span>/ {{ settings.active_mood or "no mood" }}</span></a>
+  <nav>
+    {% for item in nav %}
+      <a href="{{ item.href }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+  </nav>
+  <span class="spacer"></span>
+  <span class="muted mono" style="font-size:.75rem">
+    {{ stats.videos }} videos · {{ stats.scored }} scored
+  </span>
+</header>
+
+<main>
+{% block body %}{% endblock %}
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

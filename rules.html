@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Rules · Sieve{% endblock %}
+
+{% block body %}
+<h1>Rules</h1>
+<p class="lede">Everything the sliders cannot express. Rules run after the simple filters, and the preview below shows what they would do to your current catalogue as you type.</p>
+
+<div class="cols-2">
+
+<section class="panel">
+  <div class="check">
+    <input type="checkbox" id="rule-enabled" {{ 'checked' if settings.rules.enabled }}>
+    <label for="rule-enabled" style="margin:0">Apply this rule</label>
+  </div>
+  <label>
+    <span class="name">Rule</span>
+    <textarea id="rule-json" rows="18" spellcheck="false">{{ expr }}</textarea>
+  </label>
+  <p class="wrap-actions">
+    <button class="btn" type="button" id="rule-save">Save rule</button>
+    <span id="rule-status" class="tag"></span>
+  </p>
+
+  <h3>Start from one of these</h3>
+  <div class="wrap-actions">
+    <button class="btn ghost" type="button" data-snippet='{"all":[{"field":"education","op":">","value":70},{"field":"brainrot","op":"<","value":20},{"field":"duration_min","op":"between","value":[15,60]},{"field":"is_short","op":"is_false"}]}'>Deep educational</button>
+    <button class="btn ghost" type="button" data-snippet='{"all":[{"field":"subs","op":"<","value":50000},{"field":"production","op":"<","value":50},{"field":"technical_depth","op":">","value":65}]}'>Small channels, high substance</button>
+    <button class="btn ghost" type="button" data-snippet='{"none":[{"field":"title","op":"matches","value":"reaction|tier list|ranking every"},{"field":"music","op":">","value":60},{"field":"sponsor_ratio","op":">","value":0.2}]}'>No reactions, no music, no ad reads</button>
+    <button class="btn ghost" type="button" data-snippet='{"any":[{"field":"channel_priority","op":">=","value":3},{"all":[{"field":"info_density","op":">","value":75},{"field":"clickbait","op":"<","value":30}]}]}'>My favourites, or anything genuinely dense</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Effect</h2>
+  <div id="rule-preview"><p class="muted">Edit the rule to see what it keeps and drops.</p></div>
+</section>
+
+</div>
+
+<section class="panel">
+  <h2>Reference</h2>
+  <div class="cols">
+    <div>
+      <h3>Shape</h3>
+      <pre>{"all": [ … ]}   every condition
+{"any": [ … ]}   at least one
+{"none": [ … ]}  no condition
+{"not": { … }}   invert one
+
+{"field": "education",
+ "op": ">",
+ "value": 70}</pre>
+    </div>
+    <div>
+      <h3>Operators</h3>
+      <p class="mono" style="font-size:.78rem">{{ operators | join(" · ") }}</p>
+      <h3>Notes</h3>
+      <p class="hint"><span class="mono">between</span> takes a two-element list. <span class="mono">matches</span> takes a regular expression. <span class="mono">any_of</span> and <span class="mono">none_of</span> work on list fields like <span class="mono">keywords</span> and <span class="mono">topics</span>.</p>
+    </div>
+    <div>
+      <h3>Fields</h3>
+      <div class="scroll" style="max-height:20rem">
+        <table>
+          <tbody>
+            {% for name, kind in fields.items() %}
+              <tr><td class="mono" style="font-size:.78rem">{{ name }}</td><td class="muted">{{ kind }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

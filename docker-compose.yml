@@ -1,0 +1,18 @@
+services:
+  sieve:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - sieve-data:/data
+    environment:
+      # Point at your own Invidious instance.
+      SIEVE_INSTANCES: "http://invidious:3000"
+      SIEVE_WATCH_BASE: "http://127.0.0.1:3000/watch?v="
+      # Uncomment to use a local model for the brief compiler.
+      # SIEVE_LLM_PROVIDER: "ollama"
+      # SIEVE_LLM_BASE_URL: "http://ollama:11434"
+
+volumes:
+  sieve-data:
