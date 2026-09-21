@@ -38,7 +38,7 @@ sieve demo
 sieve serve
 ```
 
-Open <http://127.0.0.1:8080>. Every control works; the videos are fictional, so
+Open <http://127.0.0.1:8377>. Every control works; the videos are fictional, so
 the thumbnails and watch links will not resolve.
 
 > [!TIP]
@@ -97,7 +97,7 @@ To run the image on its own:
 ```bash
 docker build -t sieve .
 docker run -d --name sieve \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8377:8377 \
   -v sieve-data:/data \
   -e SIEVE_INSTANCES=http://your-invidious:3000 \
   -e SIEVE_WATCH_BASE='http://your-invidious:3000/watch?v=' \
@@ -154,7 +154,7 @@ server {
 
     # Sieve: the homepage and its own pages
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8377;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -177,7 +177,7 @@ server {
 video.example.com {
     @invidious path_regexp ^/(watch|embed|vi|ggpht|api|channel|playlist|search|feed|latest_version|videoplayback)
     reverse_proxy @invidious 127.0.0.1:3000
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:8377
 }
 ```
 
@@ -236,6 +236,18 @@ sieve import history ~/Downloads/watch-history.json
 > recorded at a conservative 0.6. They inform the model without pretending to a
 > precision the data does not have. Real completion arrives once you wire up
 > [watch progress](player.md).
+
+### Playlists
+
+Paste a playlist id or URL into the Playlists panel on the Controls page, or:
+
+```bash
+sieve import playlist PLxxxxxxxxxxxxxxxx
+```
+
+Only public and unlisted playlists can be read. YouTube's own Watch Later is
+private to your Google account and not reachable through Invidious — keep a
+public or unlisted playlist on your Invidious account for that purpose instead.
 
 ### First run
 

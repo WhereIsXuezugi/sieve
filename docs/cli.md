@@ -1,7 +1,12 @@
 # Command line
 
-Everything the web interface can do has a CLI equivalent, so a configuration can
-live in a dotfiles repo and a machine can be set up from a script.
+The command line covers running Sieve and looking after it: serving, syncing,
+scoring, importing, channel policy and profiles. It is not a complete mirror of
+the web interface.
+
+For everything else — moods, rules, the blocklist, playlists, the brief — the
+complete scripting surface is the [HTTP API](api.md), which *is* a complete
+mirror, enforced by a test. Anything you can click, you can `curl`.
 
 ```
 sieve [--config PATH] COMMAND

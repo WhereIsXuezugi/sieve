@@ -22,7 +22,7 @@ having to rebase a fork.
       reverse proxy
         ╱       ╲
     Sieve      Invidious
-   :8080         :3000
+   :8377         :3000
       │             │
    sieve.db    the catalogue,
    (SQLite)    player and proxy
@@ -115,6 +115,19 @@ upgrading in place needs no dump and reload.
 
 </details>
 
+## One implementation, two surfaces
+
+Every user-facing operation exists once, in `actions.py` or its domain module.
+The web form and the API endpoint that do the same thing both call it, so one
+cannot quietly gain validation the other lacks.
+
+`tests/test_parity.py` enforces the rest. It reads the app's OpenAPI schema,
+and fails if any route on either surface lacks a declared counterpart on the
+other, or if a declared web control is missing from its page. The schema rather
+than `app.routes` is deliberate: recent FastAPI stores an included router as a
+single lazy entry there, and a parity check that cannot see half the routes
+passes without checking anything.
+
 ## Untrusted input
 
 Three things reach Sieve from outside and all three go through the same
@@ -132,7 +145,11 @@ Controls page cannot.
 
 | Module | Responsibility |
 |---|---|
-| `app.py` | routes, forms, template context |
+| `app.py` | page routes, forms, template context |
+| `api.py` | the JSON API; see [api.md](api.md) |
+| `actions.py` | operations shared by the web app and the API, so neither can drift |
+| `present.py` | how a recommendation is titled and illustrated, for both surfaces |
+| `doctor.py` | the health check behind `sieve doctor`, `/api/doctor` and the debugger |
 | `ranking.py` | the pipeline above |
 | `scoring.py` | twelve content scores, each linear and self-explaining |
 | `channels.py` | priority, allow/block, affinity, quality |

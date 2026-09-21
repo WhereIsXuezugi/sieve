@@ -16,7 +16,7 @@ real numbers, have the player page report progress:
 ```js
 // Add to your Invidious instance, e.g. in a user script or a template override.
 (function () {
-  const SIEVE = 'http://127.0.0.1:8080';
+  const SIEVE = 'http://127.0.0.1:8377';
   const player = document.querySelector('video');
   const videoId = new URLSearchParams(location.search).get('v');
   if (!player || !videoId) return;

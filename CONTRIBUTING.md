@@ -56,8 +56,11 @@ You do not have to agree, but a PR that contradicts one of these should say why.
   profiles go through `profiles.sanitise_settings`. Unknown keys are dropped
   rather than rejected loudly, because a stranger's profile with one unfamiliar
   key should still work.
-- **Everything reachable from the UI is reachable from the CLI**, so a
-  configuration can live in a dotfiles repo.
+- **Everything reachable from the web app is reachable from the API**, and
+  the other way round. `tests/test_parity.py` fails if a route is added to one
+  surface without being declared against the other; if something genuinely
+  belongs on one side only, it goes in `ONE_SIDED` with the reason. Put the
+  logic in `actions.py` and call it from both, so they cannot drift.
 
 ## Tests
 
@@ -96,6 +99,17 @@ Those are the ones worth writing.
 6. Bump `SCORER_VERSION` so existing rows get rescored
 
 Steps 4 and 6 are the ones people forget, and both fail quietly.
+
+## Adding a user-facing feature
+
+1. Put the operation in `actions.py` (or the domain module it belongs to), so
+   there is exactly one implementation
+2. Expose it in `api.py` with a `summary=` — `test_docs.py` rejects endpoints
+   that only have an auto-generated one
+3. Add the web control, calling the API endpoint
+4. Declare the pair in `API_TO_WEB` in `tests/test_parity.py`, and give it a
+   call in `CALLS`
+5. Add the endpoint to `docs/api.md`; `test_docs.py` fails until you do
 
 ## Adding a rule field
 

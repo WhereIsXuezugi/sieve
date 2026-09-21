@@ -39,14 +39,14 @@ prefix, uppercased: `instances` becomes `SIEVE_INSTANCES`.
 
 | Key | Default | Notes |
 |---|---|---|
-| `data_dir` | `~/.local/share/sieve` | Holds `sieve.db` and nothing else |
+| `data_dir` | `$XDG_DATA_HOME/sieve`, usually `~/.local/share/sieve` | Holds `sieve.db` and nothing else. `~` is expanded |
 | `host` | `127.0.0.1` | See the [exposure warning](install.md#a-note-on-exposure) before changing |
-| `port` | `8080` | |
+| `port` | `8377` | |
 | `instances` | `["http://127.0.0.1:3000"]` | Failover list, tried in order |
 | `watch_base` | `http://127.0.0.1:3000/watch?v=` | Where Watch links point |
-| `request_timeout` | `12` | Seconds, per upstream request |
-| `cache_ttl` | `900` | Seconds to cache search and listing responses |
-| `catalog_ttl` | `86400` | Seconds to cache video and channel metadata |
+| `request_timeout` | `8.0` | Seconds, per upstream request |
+| `cache_ttl` | `3600` | Seconds to cache search and listing responses |
+| `catalog_ttl` | `604800` | Seconds a video's metadata stays fresh (a week) |
 
 ### Scoring
 
@@ -54,8 +54,8 @@ prefix, uppercased: `instances` becomes `SIEVE_INSTANCES`.
 |---|---|---|
 | `use_transcripts` | `true` | Fetch caption tracks. Turn off on a very small host; scoring falls back to metadata with lower confidence |
 | `transcript_max_chars` | `20000` | |
-| `score_batch` | `40` | Videos per background pass |
-| `workers` | `1` | |
+| `score_batch` | `24` | Videos per background pass |
+| `workers` | `2` | |
 
 ### DeArrow and SponsorBlock
 
@@ -126,13 +126,18 @@ but instant and deterministic, and the text box is never dead weight.
 
 Searched in this order, first hit wins:
 
-1. `--config /path/to/config.toml`
+1. `--config /path/to/config.toml` — an error if that file does not exist
 2. `$SIEVE_CONFIG`
-3. `./sieve.toml`
-4. `~/.config/sieve/config.toml`
+3. `./sieve.toml`, in the directory you run `sieve` from
+4. `$XDG_CONFIG_HOME/sieve/config.toml`, usually `~/.config/sieve/config.toml`
+5. `/etc/sieve/config.toml`
 
 Environment variables override the file, so a container can ship a config and
 still be reconfigured at run time.
+
+> [!TIP]
+> If you edited a config and nothing changed, run `sieve doctor --quick`. Its
+> `config.file` field shows which file was actually loaded — or that none was.
 
 ---
 

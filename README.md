@@ -18,7 +18,7 @@ Ask a local model, in prose, for what you actually want.
 [![dependencies](https://img.shields.io/badge/runtime%20dependencies-5-916200)](requirements.txt)
 
 [Install](docs/install.md) · [Configuration](docs/configuration.md) ·
-[Rules](docs/rules.md) · [CLI](docs/cli.md) ·
+[Rules](docs/rules.md) · [API](docs/api.md) · [CLI](docs/cli.md) ·
 [Architecture](docs/architecture.md) · [Player](docs/player.md)
 
 </div>
@@ -36,7 +36,7 @@ git clone https://github.com/whereixuezugi/sieve && cd sieve
 pip install -e .
 
 sieve demo     # 400 synthetic videos, no instance needed
-sieve serve    # http://127.0.0.1:8080
+sieve serve    # http://127.0.0.1:8377
 ```
 
 ---
@@ -235,6 +235,39 @@ trains on the request thread and shows you its coefficients.
 </details>
 
 <details>
+<summary><b>Playlists</b> — a homepage that is just your queue</summary>
+
+<br>
+
+Paste a playlist id or URL and it is imported; every sync keeps it current. Make
+one playlist the entire homepage — the "100% Watch Later" setup — or raise the
+playlists source to mix it in with everything else.
+
+YouTube's own Watch Later is private to your Google account and Invidious cannot
+read it, so keep a public or unlisted playlist on your Invidious account and use
+that instead. Sieve says so rather than importing nothing.
+
+</details>
+
+<details>
+<summary><b>An API for all of it</b> — anything you can click, you can script</summary>
+
+<br>
+
+Every feature in the web app has a JSON endpoint, and a test fails if the two
+ever diverge. Switch moods from cron, keep your channel lists in git, or build a
+different front end entirely.
+
+```bash
+curl -s localhost:8377/api/recommendations?limit=3 | jq '.items[] | {title, explanation}'
+```
+
+A running instance serves interactive docs at `/api/docs`; the overview is in
+[docs/api.md](docs/api.md).
+
+</details>
+
+<details>
 <summary><b>Profiles</b> — configurations as files</summary>
 
 <br>
@@ -258,7 +291,7 @@ API. Three lines of nginx put it in front:
 
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:8080;   # Sieve owns the homepage
+    proxy_pass http://127.0.0.1:8377;   # Sieve owns the homepage
 }
 location ~ ^/(watch|embed|vi|api|channel|playlist|search|latest_version) {
     proxy_pass http://127.0.0.1:3000;   # Invidious owns everything else
@@ -361,7 +394,8 @@ anywhere, and the database is a file you can read.
 | [Installation](docs/install.md) | Source, Docker, nginx, systemd, importing your data |
 | [Configuration](docs/configuration.md) | Every deployment key and user setting |
 | [Rules](docs/rules.md) | The rule language, field reference and cookbook |
-| [Command line](docs/cli.md) | Every command, with recipes |
+| [HTTP API](docs/api.md) | Every endpoint — anything you can click, you can `curl` |
+| [Command line](docs/cli.md) | Running and maintaining Sieve, with recipes |
 | [Architecture](docs/architecture.md) | Why it is built this way |
 | [Player integration](docs/player.md) | Watch progress and SponsorBlock skipping |
 | [Contributing](CONTRIBUTING.md) | How to propose a change |

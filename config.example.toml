@@ -1,10 +1,11 @@
 # Sieve configuration. Every key here can also be set as an environment
 # variable with a SIEVE_ prefix, e.g. SIEVE_INSTANCES, SIEVE_LLM_PROVIDER.
-# Copy to ~/.config/sieve/config.toml and edit.
+# Copy to ~/.config/sieve/config.toml and edit. `sieve doctor` reports which
+# file was actually loaded, if you are ever unsure.
 
 data_dir = "~/.local/share/sieve"
 host = "127.0.0.1"
-port = 8080
+port = 8377
 
 # Your Invidious instance first. Extra entries are failover only — Sieve moves
 # down the list when one stops answering and stays on whichever worked last.
@@ -18,11 +19,13 @@ watch_base = "http://127.0.0.1:3000/watch?v="
 use_transcripts = true
 transcript_max_chars = 20000
 
-# Background worker
-workers = 1
-score_batch = 40
-cache_ttl = 900
-catalog_ttl = 86400
+# Background worker and caching. These are the defaults; delete any line you
+# do not want to change.
+request_timeout = 8.0       # seconds, per upstream request
+workers = 2
+score_batch = 24            # videos per background scoring pass
+cache_ttl = 3600            # seconds to cache listing and search responses
+catalog_ttl = 604800        # seconds a video's metadata stays fresh (a week)
 
 # ---------------------------------------------------------------------------
 # DeArrow and SponsorBlock
