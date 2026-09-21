@@ -34,7 +34,7 @@ class Invidious:
         self._client = httpx.Client(
             timeout=cfg.request_timeout,
             follow_redirects=True,
-            headers={"User-Agent": "sieve/0.1 (+https://github.com/yourname/sieve)"},
+            headers={"User-Agent": "sieve/0.1 (+https://github.com/whereixuezugi/sieve)"},
         )
 
     # -- plumbing ----------------------------------------------------------
