@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Sieve data — never commit a database, it is your watch history
+*.db
+*.db-wal
+*.db-shm
+sieve.toml
+config.toml
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store

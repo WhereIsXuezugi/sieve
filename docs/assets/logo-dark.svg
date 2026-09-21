@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 132" width="540" height="132" role="img" aria-label="Sieve — a programmable recommendation layer for Invidious">
+  <g transform="translate(22 23) scale(1.35)">
+  <!-- The mark is the pipeline: a wide pool of candidates, narrowed by the
+       sieve, resolving into one explained bar. The bottom element is the
+       why-bar from the interface, at its real proportions. -->
+  <rect x="1.4" y="1.4" width="61.2" height="61.2" rx="7" fill="none"
+        stroke="#4b525e" stroke-width="2.8"/>
+  <g fill="#e3e5e0">
+    <rect x="10" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="16.6" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="23.2" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="29.8" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="36.4" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="43" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="49.6" y="15" width="4.6" height="4.6" rx="1"/>
+  </g>
+  <g fill="#e3e5e0" opacity="0.55">
+    <rect x="16.6" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="26.5" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="36.4" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="46.3" y="26" width="4.6" height="4.6" rx="1"/>
+  </g>
+  <g>
+    <path d="M12 40.8h18.6v8.4H12a2.6 2.6 0 0 1-2.6-2.6v-3.2A2.6 2.6 0 0 1 12 40.8z" fill="#8c86ff"/>
+    <rect x="30.6" y="40.8" width="13.6" height="8.4" fill="#4bbfae"/>
+    <path d="M44.2 40.8H52a2.6 2.6 0 0 1 2.6 2.6v3.2A2.6 2.6 0 0 1 52 49.2h-7.8z" fill="#d9a441"/>
+  </g>
+  </g>
+  <text x="130" y="63" font-family="system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="49" font-weight="600"
+        letter-spacing="-1.5" fill="#e3e5e0">sieve</text>
+  <rect x="132" y="76" width="382" height="1.5" fill="#3c434f"/>
+  <text x="132" y="98" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="13" letter-spacing="0.15"
+        fill="#98a0aa">a programmable recommendation layer for Invidious</text>
+</svg>

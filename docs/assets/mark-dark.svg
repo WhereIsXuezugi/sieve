@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Sieve">
+  <!-- The mark is the pipeline: a wide pool of candidates, narrowed by the
+       sieve, resolving into one explained bar. The bottom element is the
+       why-bar from the interface, at its real proportions. -->
+  <rect x="1.4" y="1.4" width="61.2" height="61.2" rx="7" fill="none"
+        stroke="#4b525e" stroke-width="2.8"/>
+  <g fill="#e3e5e0">
+    <rect x="10" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="16.6" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="23.2" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="29.8" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="36.4" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="43" y="15" width="4.6" height="4.6" rx="1"/>
+    <rect x="49.6" y="15" width="4.6" height="4.6" rx="1"/>
+  </g>
+  <g fill="#e3e5e0" opacity="0.55">
+    <rect x="16.6" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="26.5" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="36.4" y="26" width="4.6" height="4.6" rx="1"/>
+    <rect x="46.3" y="26" width="4.6" height="4.6" rx="1"/>
+  </g>
+  <g>
+    <path d="M12 40.8h18.6v8.4H12a2.6 2.6 0 0 1-2.6-2.6v-3.2A2.6 2.6 0 0 1 12 40.8z" fill="#8c86ff"/>
+    <rect x="30.6" y="40.8" width="13.6" height="8.4" fill="#4bbfae"/>
+    <path d="M44.2 40.8H52a2.6 2.6 0 0 1 2.6 2.6v3.2A2.6 2.6 0 0 1 52 49.2h-7.8z" fill="#d9a441"/>
+  </g>
+</svg>

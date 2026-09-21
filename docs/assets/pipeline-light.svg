@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" width="900" height="330"
+     role="img" aria-label="The ranking pipeline: candidates, gate, blend, explain, arrange, diagnose">
+  <title>How a homepage is built</title>
+  <style>
+    .h { font-family: system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size: 15px; font-weight: 600; fill: #1c2128; }
+    .l { font-family: system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size: 12.5px; fill: #4d545e; }
+    .m { font-family: ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size: 11px; fill: #767d86; }
+    .n { font-family: ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size: 22px; font-weight: 500; fill: #1c2128; }
+    .rule { stroke: #c8cac2; stroke-width: 1; }
+  </style>
+
+  <!-- the funnel: width is proportional to what survives each stage -->
+  <g>
+    <path d="M40 40 L860 40 L860 96 L40 96 Z" fill="#e2e4dd"/>
+    <path d="M40 40 L860 40 L744 96 L40 96 Z" fill="#3f3aa8" opacity=".16"/>
+    <path d="M40 40 L744 40 L352 96 L40 96 Z" fill="#3f3aa8" opacity=".22"/>
+    <path d="M40 40 L352 40 L172 96 L40 96 Z" fill="#3f3aa8" opacity=".5"/>
+    <rect x="40" y="40" width="820" height="56" fill="none" class="rule"/>
+  </g>
+
+  <g>
+    <text x="40" y="126" class="n">620</text>
+    <text x="40" y="144" class="l">candidates</text>
+    <text x="40" y="162" class="m">from your sources</text>
+
+    <text x="214" y="126" class="n">214</text>
+    <text x="214" y="144" class="l">survive the gate</text>
+    <text x="214" y="162" class="m">406 rejected, each with a reason</text>
+
+    <text x="536" y="126" class="n">36</text>
+    <text x="536" y="144" class="l">on the page</text>
+    <text x="536" y="162" class="m">after diversity and budget caps</text>
+  </g>
+
+  <line x1="40" y1="190" x2="860" y2="190" class="rule"/>
+
+  <!-- the six stages -->
+  <g>
+    
+    <g transform="translate(40 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="0.35"/>
+      <text x="0" y="232" class="h">1. candidates</text>
+      <text x="0" y="252" class="m">pull from each enabled source,</text>
+      <text x="0" y="268" class="m">tagged with where it came from</text>
+    </g>
+    <g transform="translate(177 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="0.48"/>
+      <text x="0" y="232" class="h">2. gate</text>
+      <text x="0" y="252" class="m">channel lists, then filters,</text>
+      <text x="0" y="268" class="m">then your rule tree</text>
+    </g>
+    <g transform="translate(313 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="0.61"/>
+      <text x="0" y="232" class="h">3. blend</text>
+      <text x="0" y="252" class="m">weighted sum of named</text>
+      <text x="0" y="268" class="m">components, per video</text>
+    </g>
+    <g transform="translate(450 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="0.74"/>
+      <text x="0" y="232" class="h">4. explain</text>
+      <text x="0" y="252" class="m">positive components become</text>
+      <text x="0" y="268" class="m">percentages summing to 100</text>
+    </g>
+    <g transform="translate(587 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="0.87"/>
+      <text x="0" y="232" class="h">5. arrange</text>
+      <text x="0" y="252" class="m">diversify, cap per channel,</text>
+      <text x="0" y="268" class="m">enforce composition quotas</text>
+    </g>
+    <g transform="translate(723 0)">
+      <rect x="0" y="206" width="123" height="3" fill="#3f3aa8"
+            opacity="1.00"/>
+      <text x="0" y="232" class="h">6. diagnose</text>
+      <text x="0" y="252" class="m">topic entropy, rabbit-hole</text>
+      <text x="0" y="268" class="m">warning, rejection tally</text>
+    </g>
+  </g>
+</svg>

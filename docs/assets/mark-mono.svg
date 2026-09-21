@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Sieve">
+  <title>Sieve</title>
+  <!-- Single colour, for anywhere the mark gets recoloured: shields, print,
+       a terminal splash. Inherits `currentColor`, so it needs no variants.
+       The why-bar keeps its three divisions as gaps rather than hues. -->
+  <g fill="currentColor">
+    <rect x="1.4" y="1.4" width="61.2" height="61.2" rx="7" fill="none"
+          stroke="currentColor" stroke-width="2.8" opacity=".45"/>
+    <g>
+      <rect x="10" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="16.6" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="23.2" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="29.8" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="36.4" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="43" y="15" width="4.6" height="4.6" rx="1"/>
+      <rect x="49.6" y="15" width="4.6" height="4.6" rx="1"/>
+    </g>
+    <g opacity=".55">
+      <rect x="16.6" y="26" width="4.6" height="4.6" rx="1"/>
+      <rect x="26.5" y="26" width="4.6" height="4.6" rx="1"/>
+      <rect x="36.4" y="26" width="4.6" height="4.6" rx="1"/>
+      <rect x="46.3" y="26" width="4.6" height="4.6" rx="1"/>
+    </g>
+    <path d="M12 40.8h17.4v8.4H12a2.6 2.6 0 0 1-2.6-2.6v-3.2A2.6 2.6 0 0 1 12 40.8z"/>
+    <rect x="31" y="40.8" width="12" height="8.4"/>
+    <path d="M44.6 40.8H52a2.6 2.6 0 0 1 2.6 2.6v3.2A2.6 2.6 0 0 1 52 49.2h-7.4z"/>
+  </g>
+</svg>
