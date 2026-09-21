@@ -12,7 +12,8 @@
 - [ ] `pytest -q` passes
 - [ ] New behaviour has a test, and the test fails without the change
 - [ ] No new required dependency, or the PR explains why it earns its place
-- [ ] Anything a user can set is reachable from the UI **and** the CLI
+- [ ] Anything a user can do is reachable from the web app **and** the API, and
+      both are declared in `tests/test_parity.py`
 - [ ] Anything that changes ranking is visible in the debugger
 
 ## If this adds a signal or a filter

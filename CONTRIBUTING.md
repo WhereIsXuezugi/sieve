@@ -7,7 +7,7 @@ with a reason.
 ## Getting set up
 
 ```bash
-git clone https://github.com/whereixuezugi/sieve && cd sieve
+git clone https://github.com/yourname/sieve && cd sieve
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 

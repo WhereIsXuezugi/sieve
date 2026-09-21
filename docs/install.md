@@ -30,7 +30,7 @@ plausible watch history, and trains the ranker on it. No network, no account,
 nothing to clean up afterwards except one directory.
 
 ```bash
-git clone https://github.com/whereixuezugi/sieve
+git clone https://github.com/yourname/sieve
 cd sieve
 pip install -e .
 
@@ -50,7 +50,7 @@ the thumbnails and watch links will not resolve.
 ## From source
 
 ```bash
-git clone https://github.com/whereixuezugi/sieve
+git clone https://github.com/yourname/sieve
 cd sieve
 python -m venv .venv && source .venv/bin/activate
 pip install -e .

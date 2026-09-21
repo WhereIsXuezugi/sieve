@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+{% block title %}Controls · Sieve{% endblock %}
+
+{% block body %}
+<h1>Controls</h1>
+<p class="lede">Everything here is stored in your own database and exported as plain JSON. Nothing is hidden from you and nothing is sent anywhere.</p>
+
+{% if request.query_params.get('saved') %}
+  <div class="notice good">Saved. <a href="/">Back to the homepage</a></div>
+{% endif %}
+
+<form method="post" action="/settings">
+
+<div class="cols-2">
+
+  <section class="panel">
+    <h2>Homepage</h2>
+    <p class="hint">How much you see and how it is arranged.</p>
+    <div class="slider">
+      <span class="name">Videos on the page</span>
+      <input type="range" name="homepage.count" min="6" max="120" step="6" value="{{ stored.homepage.count }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Columns</span>
+      <input type="range" name="homepage.columns" min="2" max="6" value="{{ stored.homepage.columns }}">
+      <output></output>
+    </div>
+    <label><span class="name">Density</span>
+      <select name="homepage.density">
+        {% for option in ['comfortable', 'compact', 'list'] %}
+          <option value="{{ option }}" {{ 'selected' if stored.homepage.density == option }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label><span class="name">What fills the page</span>
+      <select name="homepage.mode">
+        <option value="blend" {{ 'selected' if stored.homepage.mode == 'blend' }}>Blend of my sources</option>
+        <option value="playlist" {{ 'selected' if stored.homepage.mode == 'playlist' }}>One playlist only</option>
+        <option value="continue" {{ 'selected' if stored.homepage.mode == 'continue' }}>Unfinished videos only</option>
+        <option value="subscriptions" {{ 'selected' if stored.homepage.mode == 'subscriptions' }}>Subscriptions only</option>
+      </select>
+    </label>
+    <label><span class="name">Playlist</span>
+      <select name="homepage.playlist_id">
+        <option value="">—</option>
+        {% for p in playlists %}
+          <option value="{{ p.id }}" {{ 'selected' if stored.homepage.playlist_id == p.id }}>{{ p.title or p.id }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label><span class="name">Order changes</span>
+      <select name="homepage.refresh_seed">
+        <option value="daily" {{ 'selected' if stored.homepage.refresh_seed == 'daily' }}>Once a day</option>
+        <option value="session" {{ 'selected' if stored.homepage.refresh_seed == 'session' }}>Every load</option>
+        <option value="fixed" {{ 'selected' if stored.homepage.refresh_seed == 'fixed' }}>Never</option>
+      </select>
+    </label>
+    <div class="check"><input type="checkbox" id="he" name="homepage.show_explanations" {{ 'checked' if stored.homepage.show_explanations }}><label for="he" style="margin:0">Show the why-bar under each video</label></div>
+    <div class="check"><input type="checkbox" id="hs" name="homepage.show_scores" {{ 'checked' if stored.homepage.show_scores }}><label for="hs" style="margin:0">Show content scores</label></div>
+    <div class="check"><input type="checkbox" id="hc" name="homepage.continue_first" {{ 'checked' if stored.homepage.continue_first }}><label for="hc" style="margin:0">Put unfinished videos first</label></div>
+    <div class="check"><input type="checkbox" id="hr" name="homepage.shuffle" {{ 'checked' if stored.homepage.shuffle }}><label for="hr" style="margin:0">Ignore ranking, draw at random</label></div>
+  </section>
+
+  <section class="panel">
+    <h2>Where videos come from</h2>
+    <p class="hint">Relative weights. The percentage beside each one is its actual share.</p>
+    {% for key in source_keys %}
+      <div class="slider">
+        <span class="name">{{ key }} <span class="mono muted" data-share="{{ key }}"></span></span>
+        <input type="range" data-source-slider="{{ key }}" name="sources.{{ key }}" min="0" max="100" value="{{ stored.sources[key] }}">
+        <output></output>
+      </div>
+    {% endfor %}
+    <div class="slider">
+      <span class="name">Novelty — how far outside your usual topics to reach</span>
+      <input type="range" name="novelty" min="0" max="100" value="{{ stored.novelty }}">
+      <output></output>
+    </div>
+    <h3>Ranking weights</h3>
+    <p class="hint">How much each signal counts once candidates are collected.</p>
+    {% for key in ['source','interest','preference','learned','freshness','novelty','continue','channel_priority','channel_quality','penalty'] %}
+      <div class="slider">
+        <span class="name">{{ key.replace('_', ' ') }}</span>
+        <input type="range" name="weights.{{ key }}" min="0" max="3" step="0.1" value="{{ stored.weights[key] }}">
+        <output></output>
+      </div>
+    {% endfor %}
+  </section>
+
+</div>
+
+<section class="panel">
+  <h2>Content scores</h2>
+  <p class="hint">Tick an axis to aim for a value. Untick it and that axis is ignored entirely — a disabled target is not a neutral target, it costs nothing.</p>
+  <div class="cols">
+    {% for key in score_keys %}
+      {% set t = stored.targets[key] %}
+      <div>
+        <div class="check">
+          <input type="checkbox" id="t{{ key }}" name="targets.{{ key }}.enabled" {{ 'checked' if t.enabled }}>
+          <label for="t{{ key }}" style="margin:0"><b>{{ key.replace('_', ' ') }}</b></label>
+        </div>
+        <div class="slider">
+          <span class="name">aim for</span>
+          <input type="range" name="targets.{{ key }}.target" min="0" max="100" value="{{ t.target }}">
+          <output></output>
+        </div>
+        <div class="slider">
+          <span class="name">how much it matters</span>
+          <input type="range" name="targets.{{ key }}.weight" min="0.1" max="3" step="0.1" value="{{ t.weight }}">
+          <output></output>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="cols-2">
+
+  <section class="panel">
+    <h2>Filters</h2>
+    <p class="hint">Hard cuts. Anything failing one of these never reaches the ranking, and the debugger will tell you how many it removed.</p>
+    <div class="check"><input type="checkbox" id="f1" name="filters.hide_shorts" {{ 'checked' if stored.filters.hide_shorts }}><label for="f1" style="margin:0">Hide Shorts</label></div>
+    <label><span class="name">A Short is anything under (seconds)</span><input type="number" name="filters.shorts_seconds" value="{{ stored.filters.shorts_seconds }}"></label>
+    <div class="check"><input type="checkbox" id="f2" name="filters.hide_live" {{ 'checked' if stored.filters.hide_live }}><label for="f2" style="margin:0">Hide live streams</label></div>
+    <div class="check"><input type="checkbox" id="f3" name="filters.hide_upcoming" {{ 'checked' if stored.filters.hide_upcoming }}><label for="f3" style="margin:0">Hide premieres</label></div>
+    <div class="check"><input type="checkbox" id="f4" name="filters.hide_watched" {{ 'checked' if stored.filters.hide_watched }}><label for="f4" style="margin:0">Hide what I have already watched</label></div>
+
+    <div class="cols">
+      <label><span class="name">Shortest (s)</span><input type="number" name="filters.min_duration" value="{{ stored.filters.min_duration }}"></label>
+      <label><span class="name">Longest (s, 0 = any)</span><input type="number" name="filters.max_duration" value="{{ stored.filters.max_duration }}"></label>
+      <label><span class="name">Newest first, max age (days)</span><input type="number" name="filters.max_age_days" value="{{ stored.filters.max_age_days }}"></label>
+      <label><span class="name">Min views</span><input type="number" name="filters.min_views" value="{{ stored.filters.min_views }}"></label>
+      <label><span class="name">Max views (0 = any)</span><input type="number" name="filters.max_views" value="{{ stored.filters.max_views }}"></label>
+      <label><span class="name">Min like ratio</span><input type="number" step="0.001" name="filters.min_like_ratio" value="{{ stored.filters.min_like_ratio }}"></label>
+      <label><span class="name">Min subscribers</span><input type="number" name="filters.min_subs" value="{{ stored.filters.min_subs }}"></label>
+      <label><span class="name">Max subscribers (0 = any)</span><input type="number" name="filters.max_subs" value="{{ stored.filters.max_subs }}"></label>
+    </div>
+    <label>
+      <span class="name">Caption languages, comma separated (blank = any)</span>
+      <input type="text" name="filters.languages" placeholder="en, de, ja" value="{{ stored.filters.languages | join(', ') }}">
+    </label>
+    <p class="hint">Language is read from the caption tracks a video carries. A video with no caption information is left alone rather than hidden, since the filter cannot actually see it.</p>
+
+    <h3>Score cutoffs</h3>
+    {% for key, label in [('max_brainrot','Brainrot at most'), ('max_clickbait','Clickbait at most'), ('max_nsfw','Nudity or sexual content at most'), ('max_music','Music at most'), ('max_ai_generated','AI-generated at most'), ('max_profanity','Swearing at most'), ('min_education','Education at least'), ('min_info_density','Information density at least')] %}
+      <div class="slider">
+        <span class="name">{{ label }}</span>
+        <input type="range" name="filters.{{ key }}" min="0" max="100" value="{{ stored.filters[key] }}">
+        <output></output>
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="panel">
+    <h2>Channels</h2>
+    <p class="hint">Per-channel priority and allow/block lists live on the <a href="/channels">Channels</a> page. These knobs decide how much weight those decisions carry.</p>
+    <div class="check"><input type="checkbox" id="c1" name="channels.whitelist_only" {{ 'checked' if stored.channels.whitelist_only }}><label for="c1" style="margin:0"><b>Whitelist only</b> — show nothing but channels on my allow list</label></div>
+    <div class="check"><input type="checkbox" id="c2" name="channels.affinity_enabled" {{ 'checked' if stored.channels.affinity_enabled }}><label for="c2" style="margin:0">Let watch time raise channels on its own</label></div>
+    <div class="check"><input type="checkbox" id="c3" name="channels.blocked_hidden" {{ 'checked' if stored.channels.blocked_hidden }}><label for="c3" style="margin:0">Blocked channels disappear entirely (otherwise they are just buried)</label></div>
+    <div class="slider">
+      <span class="name">Strength of each manual priority step</span>
+      <input type="range" name="channels.manual_strength" min="0" max="1" step="0.02" value="{{ stored.channels.manual_strength }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Strength of derived watch-time affinity</span>
+      <input type="range" name="channels.affinity_strength" min="0" max="2" step="0.05" value="{{ stored.channels.affinity_strength }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Affinity half-life (days)</span>
+      <input type="range" name="channels.affinity_half_life_days" min="7" max="365" step="1" value="{{ stored.channels.affinity_half_life_days }}">
+      <output></output>
+    </div>
+    <p class="wrap-actions">
+      <button class="btn ghost" type="button" data-action="/api/channels/recompute">Recompute affinity</button>
+      <button class="btn ghost" type="button" data-action="/api/channels/quality">Rescore channel quality</button>
+    </p>
+    <p class="hint">Channel quality is separate from anything you set: it is what a channel's own catalogue looks like — education, information density and topic consistency, minus clickbait and brainrot. The <span class="mono">channel_quality</span> weight decides how much it counts.</p>
+
+    <h2>Composition</h2>
+    <p class="hint">Force a mix rather than letting the ranking decide it. Quotas are relative; daily caps are absolute counts per bucket.</p>
+    <div class="check"><input type="checkbox" id="b1" name="budget.enabled" {{ 'checked' if stored.budget.enabled }}><label for="b1" style="margin:0">Enforce a composition budget</label></div>
+    <div class="cols">
+      {% for bucket in buckets %}
+        <label><span class="name">{{ bucket }} quota</span>
+          <input type="number" name="budget.quotas.{{ bucket }}" value="{{ stored.budget.quotas.get(bucket, 0) }}"></label>
+        <label><span class="name">{{ bucket }} per day</span>
+          <input type="number" name="budget.daily_caps.{{ bucket }}" value="{{ stored.budget.daily_caps.get(bucket, 0) }}"></label>
+      {% endfor %}
+    </div>
+
+    <h2>Diversity</h2>
+    <div class="check"><input type="checkbox" id="d1" name="diversity.enabled" {{ 'checked' if stored.diversity.enabled }}><label for="d1" style="margin:0">Spread results out and warn about rabbit holes</label></div>
+    <label><span class="name">Most videos from one channel</span><input type="number" name="diversity.max_per_channel" value="{{ stored.diversity.max_per_channel }}"></label>
+    <div class="slider">
+      <span class="name">Relevance vs variety (1 = pure relevance)</span>
+      <input type="range" name="diversity.mmr_lambda" min="0.2" max="1" step="0.05" value="{{ stored.diversity.mmr_lambda }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Warn when diversity drops below</span>
+      <input type="range" name="diversity.warn_below" min="0" max="1" step="0.05" value="{{ stored.diversity.warn_below }}">
+      <output></output>
+    </div>
+    <div class="check"><input type="checkbox" id="l1" name="learning.enabled" {{ 'checked' if stored.learning.enabled }}><label for="l1" style="margin:0">Learn from my feedback</label></div>
+  </section>
+
+</div>
+
+<div class="cols-2">
+
+  <section class="panel">
+    <h2>DeArrow</h2>
+    <p class="hint">Crowd-voted titles and thumbnails from the DeArrow project, so you see what a video is actually about instead of what its thumbnail promises. Lookups go out by hashed prefix, so the server never learns which video you asked for.</p>
+    <div class="check"><input type="checkbox" id="da1" name="dearrow.enabled" {{ 'checked' if stored.dearrow.enabled }}><label for="da1" style="margin:0">Use DeArrow</label></div>
+    <div class="check"><input type="checkbox" id="da2" name="dearrow.replace_titles" {{ 'checked' if stored.dearrow.replace_titles }}><label for="da2" style="margin:0">Replace titles</label></div>
+    <div class="check"><input type="checkbox" id="da3" name="dearrow.replace_thumbnails" {{ 'checked' if stored.dearrow.replace_thumbnails }}><label for="da3" style="margin:0">Replace thumbnails</label></div>
+    <div class="check"><input type="checkbox" id="da4" name="dearrow.show_original" {{ 'checked' if stored.dearrow.show_original }}><label for="da4" style="margin:0">Show me the original title too</label></div>
+    <label><span class="name">Only use titles with at least this many votes</span><input type="number" name="dearrow.min_votes" value="{{ stored.dearrow.min_votes }}"></label>
+    <p class="hint">A video whose title the community felt the need to rewrite is, by itself, evidence of clickbait. Sieve feeds that into the clickbait score rather than guessing from capital letters alone.</p>
+  </section>
+
+  <section class="panel">
+    <h2>SponsorBlock</h2>
+    <p class="hint">Segment data from SponsorBlock, used two ways: the player skips what you ask it to, and the proportion of a video given over to sponsor reads becomes a ranking signal.</p>
+    <div class="check"><input type="checkbox" id="sb1" name="sponsorblock.enabled" {{ 'checked' if stored.sponsorblock.enabled }}><label for="sb1" style="margin:0">Use SponsorBlock</label></div>
+    <h3>Skip these while watching</h3>
+    <div class="cols">
+      {% for category in ['sponsor','selfpromo','interaction','intro','outro','preview','music_offtopic','filler'] %}
+        <div class="check">
+          <input type="checkbox" id="sk{{ category }}" name="sponsorblock.skip" value="{{ category }}" {{ 'checked' if category in stored.sponsorblock.skip }}>
+          <label for="sk{{ category }}" style="margin:0">{{ category.replace('_', ' ') }}</label>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="slider">
+      <span class="name">Hide videos more than this fraction sponsor read</span>
+      <input type="range" name="sponsorblock.max_sponsor_ratio" min="0.02" max="1" step="0.01" value="{{ stored.sponsorblock.max_sponsor_ratio }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Hide videos more than this fraction filler</span>
+      <input type="range" name="sponsorblock.max_filler_ratio" min="0.02" max="1" step="0.01" value="{{ stored.sponsorblock.max_filler_ratio }}">
+      <output></output>
+    </div>
+    <div class="slider">
+      <span class="name">Rank down by sponsor load</span>
+      <input type="range" name="sponsorblock.score_penalty" min="0" max="3" step="0.1" value="{{ stored.sponsorblock.score_penalty }}">
+      <output></output>
+    </div>
+    <div class="check"><input type="checkbox" id="sb2" name="sponsorblock.hide_exclusive_access" {{ 'checked' if stored.sponsorblock.hide_exclusive_access }}><label for="sb2" style="margin:0">Hide videos flagged as paid exclusive access</label></div>
+  </section>
+
+</div>
+
+<div class="sticky-save">
+  <button class="btn" type="submit">Save controls</button>
+  <a class="btn ghost" href="/">Cancel</a>
+  <span class="spacer" style="flex:1"></span>
+</div>
+</form>
+
+<section class="panel" id="moods">
+  <h2>Moods</h2>
+  <p class="hint">A mood is a saved overlay, not a saved copy: only the settings that differ from your base configuration are stored, so changing a filter later still reaches every mood that did not deliberately override it.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Mood</th><th>Overrides</th><th></th></tr></thead>
+      <tbody>
+        {% for name, patch in stored.moods.items() %}
+          <tr>
+            <td>{{ name }} {% if stored.active_mood == name %}<span class="tag high">active</span>{% endif %}</td>
+            <td class="muted" style="font-size:.78rem">{{ patch.keys() | join(', ') }}</td>
+            <td class="right">
+              <form method="post" action="/settings/mood/delete" style="display:inline">
+                <input type="hidden" name="name" value="{{ name }}">
+                <button class="btn ghost" style="font-size:.74rem;padding:.05rem .4rem" type="submit">delete</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="muted">No moods yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h3>Save the current settings as a mood</h3>
+  <form method="post" action="/settings/mood/save" class="wrap-actions">
+    <input type="text" name="name" placeholder="Late night" required style="max-width:16rem">
+    <button class="btn ghost" type="submit">Save as mood</button>
+  </form>
+</section>
+
+<section class="panel" id="playlists">
+  <h2>Playlists</h2>
+  <p class="hint">Import a playlist by id or by pasting its URL from Invidious or YouTube. Every sync keeps it current, so videos you add later show up on their own. Use one as the whole homepage, or raise the <span class="mono">playlists</span> source to mix it in.</p>
+  <div class="wrap-actions">
+    <input type="text" id="playlist-ref" placeholder="PLxxxxxxxxxxxxxxxx or https://…/playlist?list=PL…" style="max-width:32rem" autocomplete="off">
+    <button class="btn" type="button" id="playlist-import">Import playlist</button>
+  </div>
+  <p id="playlist-status" class="hint" role="status"></p>
+  <p class="hint">Only public and unlisted playlists can be read. YouTube's own Watch Later is private to your Google account and not reachable through Invidious — keep a public or unlisted playlist on your Invidious account instead.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Playlist</th><th class="num">Videos</th><th class="num">Refreshed</th><th></th></tr></thead>
+      <tbody>
+        {% for pl in playlist_rows %}
+          <tr data-playlist="{{ pl.id }}">
+            <td>
+              {{ pl.title }}
+              {% if pl.homepage %}<span class="tag high">homepage</span>{% endif %}
+              <div class="muted mono" style="font-size:.72rem">{{ pl.id }}</div>
+            </td>
+            <td class="num">{{ pl.videos }}</td>
+            <td class="num">{{ pl.updated_at | ago }}</td>
+            <td class="right">
+              <div class="wrap-actions" style="gap:.2rem;justify-content:flex-end">
+                <button class="btn ghost" type="button" style="font-size:.74rem;padding:.05rem .4rem" data-playlist-action="homepage">Use as homepage</button>
+                <button class="btn ghost" type="button" style="font-size:.74rem;padding:.05rem .4rem" data-playlist-action="refresh">Refresh</button>
+                <button class="btn ghost" type="button" style="font-size:.74rem;padding:.05rem .4rem" data-playlist-action="remove">Remove</button>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="muted">No playlists imported yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="profiles">
+  <h2>Profiles</h2>
+  <div class="cols">
+    <div>
+      <h3>Save this configuration</h3>
+      <form method="post" action="/profile/save" class="wrap-actions">
+        <input type="text" name="name" placeholder="No brainrot, heavy on lectures" required>
+        <button class="btn ghost" type="submit">Save</button>
+      </form>
+      {% if saved %}
+        <h3>Saved on this machine</h3>
+        <table>
+          <tbody>
+            {% for prof in saved %}
+              <tr data-profile="{{ prof.name }}">
+                <td>{{ prof.name }}{% if prof.author %} <span class="muted">by {{ prof.author }}</span>{% endif %}</td>
+                <td class="right">
+                  <form method="post" action="/profile/load" style="display:inline">
+                    <input type="hidden" name="name" value="{{ prof.name }}">
+                    <button class="btn ghost" type="submit" style="font-size:.74rem;padding:.05rem .4rem">Load</button>
+                  </form>
+                  <button class="btn ghost" type="button" style="font-size:.74rem;padding:.05rem .4rem" data-profile-delete>Delete</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+    <div>
+      <h3>Share it</h3>
+      <p class="hint">Settings, interests and channel policy as one JSON file.</p>
+      <p><a class="btn ghost" href="/api/profile/export">Export as JSON</a></p>
+      <h3>Import one</h3>
+      <label><span class="name">From a file</span>
+        <input type="file" accept="application/json" id="profile-file"></label>
+      <label><span class="name">From a URL — a gist, a repo, a forum attachment</span>
+        <span class="wrap-actions">
+          <input type="url" id="profile-url" placeholder="https://example.com/no-brainrot.json">
+          <button class="btn ghost" type="button" id="profile-fetch">Fetch and merge</button>
+        </span>
+      </label>
+      <p id="profile-fetch-status" class="hint" role="status"></p>
+      <p class="hint">Imports go through the same whitelist as model output: unknown keys are dropped and values clamped.</p>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="data">
+  <h2>Data and maintenance</h2>
+  <div class="cols">
+    <div>
+      <h3>Import your data</h3>
+      <label><span class="name">Subscriptions (Invidious, NewPipe or FreeTube export)</span>
+        <input type="file" accept="application/json" data-upload="/api/import/subscriptions"></label>
+      <label><span class="name">Watch history (Invidious export or Google Takeout)</span>
+        <input type="file" accept="application/json" data-upload="/api/import/history"></label>
+    </div>
+    <div>
+      <h3>Catalogue</h3>
+      <p class="wrap-actions">
+        <button class="btn ghost" type="button" data-action="/api/sync">Sync now</button>
+        <button class="btn ghost" type="button" data-action="/api/score">Score new videos</button>
+        <button class="btn ghost" type="button" data-action="/api/score" data-body='{"all": true}'
+                data-confirm="Rescore every video? This takes a while on a large catalogue.">Rescore everything</button>
+        <button class="btn ghost" type="button" data-action="/api/maintenance/prune">Prune and vacuum</button>
+      </p>
+      <p class="hint">The background worker syncs and scores on its own. These are for when you do not want to wait — or after changing <span class="mono">embed_provider</span>, which needs a full rescore.</p>
+    </div>
+    <div>
+      <h3>Learning and signals</h3>
+      <p class="wrap-actions">
+        <button class="btn ghost" type="button" data-action="/api/model/retrain">Retrain from history</button>
+        <button class="btn ghost" type="button" data-action="/api/interests/rederive">Rederive interests</button>
+        <button class="btn ghost" type="button" data-action="/api/vision/scan">Scan thumbnails</button>
+      </p>
+      <p class="hint">Thumbnail scanning needs the optional <span class="mono">vision</span> extra; without it the button reports what to install.</p>
+    </div>
+    <div>
+      <h3>Start over</h3>
+      <p class="hint">Resets every control on this page to its default. History, subscriptions, playlists and channel lists are untouched.</p>
+      <form method="post" action="/settings/reset" data-confirm="Reset every control to its default?">
+        <button class="btn danger" type="submit">Reset controls</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

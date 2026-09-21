@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Channels · Sieve{% endblock %}
+
+{% block body %}
+<h1>Channels</h1>
+<p class="lede">Two separate columns: the priority you set, and the affinity Sieve worked out from your watch time. Neither one silently overwrites the other.</p>
+
+{% if settings.channels.whitelist_only %}
+  <div class="notice">Whitelist-only mode is on, so only the {{ channels | selectattr('listing', 'equalto', 'allow') | list | length }} channels marked <span class="tag allow">allow</span> can appear. <a href="/settings">Turn it off</a></div>
+{% endif %}
+
+<form method="get" class="wrap-actions" style="margin-bottom:1rem">
+  <input type="search" name="q" value="{{ q }}" placeholder="Find a channel" style="max-width:20rem">
+  <button class="btn ghost" type="submit">Search</button>
+  <button class="btn ghost" type="button" data-action="/api/channels/recompute">Recompute affinity</button>
+  <button class="btn ghost" type="button" data-action="/api/channels/quality">Rescore quality</button>
+  <a class="btn ghost" href="/api/channels/export" download="sieve-channels.json">Export lists</a>
+  <label class="btn ghost" style="margin:0;cursor:pointer">Import lists
+    <input type="file" accept="application/json" id="channels-file" hidden></label>
+</form>
+
+<div class="panel scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Channel</th>
+      <th>Priority</th>
+      <th>List</th>
+      <th class="num">Affinity</th>
+      <th class="num">Quality</th>
+      <th class="num">Focus</th>
+      <th class="num">Watched</th>
+      <th class="num">Finished</th>
+      <th class="num">Last seen</th>
+      <th title="Allowed channels can skip your soft filters">Exempt</th>
+      <th>Note</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for channel in channels %}
+      <tr data-channel="{{ channel.id }}" data-current-listing="{{ channel.listing }}">
+        <td>
+          <div>{{ channel.name or channel.id }}</div>
+          <div class="muted mono" style="font-size:.72rem">
+            {{ channel.id }}
+            {% if channel.subscribed %} · subscribed{% endif %}
+          </div>
+        </td>
+        <td>
+          <div class="priority">
+            {% for value in [-5, -3, -1, 0, 1, 3, 5] %}
+              <button type="button" data-priority="{{ value }}"
+                      {% if value < 0 %}data-neg="1"{% endif %}
+                      aria-pressed="{{ 'true' if channel.priority == value else 'false' }}"
+                      title="Set priority {{ value }}">{{ value if value else '·' }}</button>
+            {% endfor %}
+          </div>
+        </td>
+        <td>
+          <div class="wrap-actions" style="gap:.2rem">
+            <button class="btn ghost" style="font-size:.74rem;padding:.05rem .4rem" type="button"
+                    data-listing="allow" aria-pressed="{{ 'true' if channel.listing == 'allow' else 'false' }}">allow</button>
+            <button class="btn ghost" style="font-size:.74rem;padding:.05rem .4rem" type="button"
+                    data-listing="block" aria-pressed="{{ 'true' if channel.listing == 'block' else 'false' }}">block</button>
+          </div>
+        </td>
+        <td class="num">
+          <span class="meter teal" title="{{ (channel.affinity * 100) | round | int }}%">
+            <i style="width: {{ (channel.affinity * 100) | round | int }}%"></i>
+          </span>
+        </td>
+        <td class="num" title="Education and density minus bait, from this channel's own catalogue">
+          <span class="meter"><i style="width: {{ channel.quality | round | int }}%"></i></span>
+        </td>
+        <td class="num" title="How consistently this channel stays on one subject">
+          {{ (channel.consistency * 100) | round | int }}%
+        </td>
+        <td class="num">{{ (channel.watch_seconds / 3600) | round(1) }} h</td>
+        <td class="num">{{ (channel.completion * 100) | round | int }}%</td>
+        <td class="num">{{ channel.last_watched | ago }}</td>
+        <td>
+          <input type="checkbox" data-channel-exempt {{ 'checked' if channel.exempt_filters }}
+                 {{ '' if channel.listing == 'allow' else 'disabled' }}
+                 title="{{ 'Skip score filters, duration limits and rules for this channel' if channel.listing == 'allow' else 'Only allowed channels can be exempt' }}"
+                 aria-label="Exempt {{ channel.name or channel.id }} from filters">
+        </td>
+        <td><input type="text" data-channel-note value="{{ channel.note }}" maxlength="500"
+                   placeholder="why" style="min-width:9rem;font-size:.8rem;padding:.1rem .3rem"
+                   aria-label="Note for {{ channel.name or channel.id }}"></td>
+        <td>
+          {% if channel.priority or channel.listing != 'neutral' or channel.note or channel.exempt_filters %}
+            <button type="button" class="btn ghost" data-channel-clear style="font-size:.72rem;padding:.02rem .35rem"
+                    title="Forget everything you set for this channel. Derived affinity and quality are kept.">Forget</button>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="12" class="muted">No channels yet. Import your subscriptions from the <a href="/settings">Controls</a> page, or watch something.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<p id="channels-status" class="hint" role="status"></p>
+
+<section class="panel">
+  <h2>How priority is used</h2>
+  <p class="hint">A channel at +5 gets {{ (5 * settings.channels.manual_strength) | round(2) }} added to its rank score, which is enough to lift it past most of the page. A channel at -5 loses the same amount without vanishing, so you keep seeing the occasional one rather than pretending it does not exist. Blocking is the setting for "never again".</p>
+  <p class="hint">Affinity is derived, not set: it is your watch seconds on that channel, weighted by how much of each video you finished and decayed on a {{ settings.channels.affinity_half_life_days | int }}-day half-life, then scaled against your most-watched channel. It is worth up to {{ settings.channels.affinity_strength }} of rank on its own.</p>
+  <p class="hint"><b>Exempt</b> lets an allowed channel through your soft filters — score cutoffs, duration limits and rules — so a favourite that happens to post a long, sweary, music-heavy video still appears. Block lists and whitelist-only mode still apply. <b>Export lists</b> writes your allow list, block list and priorities as JSON; <b>Import lists</b> merges one in.</p>
+</section>
+{% endblock %}

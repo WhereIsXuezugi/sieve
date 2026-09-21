@@ -13,6 +13,7 @@ Allocate your feed by source. See why every video is there. Filter on scores the
 system will show you the arithmetic for. Set per-channel priority from −5 to +5.
 Ask a local model, in prose, for what you actually want.
 
+[![ci](https://github.com/yourname/sieve/actions/workflows/ci.yml/badge.svg)](https://github.com/yourname/sieve/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-3f3aa8)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0-0f6b60)](LICENSE)
 [![dependencies](https://img.shields.io/badge/runtime%20dependencies-5-916200)](requirements.txt)
@@ -32,7 +33,7 @@ afternoon configuring a feed than be surprised by one, and its central rule is
 that **nothing affects the ranking without saying so.**
 
 ```bash
-git clone https://github.com/whereixuezugi/sieve && cd sieve
+git clone https://github.com/yourname/sieve && cd sieve
 pip install -e .
 
 sieve demo     # 400 synthetic videos, no instance needed

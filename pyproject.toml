@@ -39,11 +39,11 @@ vision = ["pillow>=10", "opennsfw2>=0.13"]
 dev = ["pytest>=8", "ruff>=0.3"]
 
 [project.urls]
-Homepage = "https://github.com/whereixuezugi/sieve"
-Documentation = "https://github.com/whereixuezugi/sieve/tree/main/docs"
-Source = "https://github.com/whereixuezugi/sieve"
-Issues = "https://github.com/whereixuezugi/sieve/issues"
-Changelog = "https://github.com/whereixuezugi/sieve/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/yourname/sieve"
+Documentation = "https://github.com/yourname/sieve/tree/main/docs"
+Source = "https://github.com/yourname/sieve"
+Issues = "https://github.com/yourname/sieve/issues"
+Changelog = "https://github.com/yourname/sieve/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sieve = "sieve.cli:main"

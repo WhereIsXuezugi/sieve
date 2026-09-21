@@ -1,0 +1,289 @@
+"""Shareable recommendation profiles.
+
+A profile is the whole user-owned configuration — settings, interests, channel
+policy — as one JSON document. Exporting gives you a file; importing merges
+someone else's into yours. This is the "recommendation market" idea from the
+brief, minus the market: it is just files, so you can put them in a git repo,
+post them in a forum thread, or keep a personal set and swap between them.
+
+Every import goes through the same whitelist as the LLM compiler, because an
+imported profile is exactly as untrusted as model output.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from typing import Any
+
+from . import channels as channel_policy
+from . import interests as interest_store
+from .config import SCORE_KEYS, SOURCE_KEYS, deep_merge, default_settings
+from .db import Database
+
+FORMAT_VERSION = 1
+
+EXPORTABLE_SECTIONS = [
+    "homepage", "sources", "weights", "novelty", "targets", "filters",
+    "channels", "dearrow", "sponsorblock", "rules", "budget", "diversity",
+    "moods", "active_mood", "brief",
+]
+
+
+def export_profile(db: Database, name: str = "", *, include_channels: bool = True,
+                   include_interests: bool = True, author: str = "") -> dict[str, Any]:
+    stored = db.get_setting("settings", {}) or {}
+    settings = deep_merge(default_settings(), stored)
+    body: dict[str, Any] = {
+        "format": FORMAT_VERSION,
+        "name": name or "sieve profile",
+        "author": author,
+        "exported_at": int(time.time()),
+        "settings": {key: settings[key] for key in EXPORTABLE_SECTIONS if key in settings},
+    }
+    if include_interests:
+        body["interests"] = [
+            {"tag": row["tag"], "weight": row["weight"], "confidence": row["confidence"]}
+            for row in db.query(
+                "SELECT tag, weight, confidence FROM interests "
+                "WHERE pinned = 1 OR origin IN ('manual','llm') OR confidence > 0.3"
+            )
+        ]
+    if include_channels:
+        body["channels"] = channel_policy.export_lists(db)
+    return body
+
+
+def import_profile(db: Database, body: dict[str, Any], *, merge: bool = True,
+                   apply_channels: bool = True, apply_interests: bool = True) -> dict[str, Any]:
+    if not isinstance(body, dict):
+        raise ValueError("profile must be a JSON object")
+    if int(body.get("format", 0)) > FORMAT_VERSION:
+        raise ValueError("this profile was made by a newer version of Sieve")
+
+    clean = sanitise_settings(body.get("settings") or {})
+    current = db.get_setting("settings", {}) or {}
+    merged = deep_merge(current, clean) if merge else clean
+    db.set_setting("settings", merged)
+
+    applied = {"settings": len(clean), "interests": 0, "channels": 0}
+
+    if apply_interests:
+        for item in body.get("interests") or []:
+            if not isinstance(item, dict) or not item.get("tag"):
+                continue
+            try:
+                weight = float(item.get("weight", 0.6))
+            except (TypeError, ValueError):
+                continue
+            interest_store.set_interest(
+                db, str(item["tag"])[:48], weight,
+                origin="imported", confidence=float(item.get("confidence", 0.6) or 0.6),
+                pinned=False,
+            )
+            applied["interests"] += 1
+
+    if apply_channels:
+        channels = body.get("channels") or {}
+        counts = channel_policy.import_lists(
+            db,
+            allow=[c["id"] for c in channels.get("allow", []) if isinstance(c, dict) and c.get("id")],
+            block=[c["id"] for c in channels.get("block", []) if isinstance(c, dict) and c.get("id")],
+            priorities=dict((channels.get("priorities") or {}).items()),
+        )
+        applied["channels"] = sum(counts.values())
+
+    return applied
+
+
+def sanitise_settings(raw: dict[str, Any]) -> dict[str, Any]:
+    """Whitelist an imported settings tree down to keys we recognise."""
+    from . import rules as rule_engine
+
+    defaults = default_settings()
+    out: dict[str, Any] = {}
+
+    def copy_scalars(section: str, spec: dict[str, type]) -> None:
+        source = raw.get(section)
+        if not isinstance(source, dict):
+            return
+        kept = {}
+        for key, caster in spec.items():
+            if key not in source:
+                continue
+            try:
+                kept[key] = caster(source[key])
+            except (TypeError, ValueError):
+                continue
+        if kept:
+            out[section] = kept
+
+    copy_scalars("homepage", {
+        "count": int, "columns": int, "density": str, "mode": str, "playlist_id": str,
+        "show_explanations": bool, "show_scores": bool, "continue_first": bool,
+        "shuffle": bool, "refresh_seed": str,
+    })
+    copy_scalars("channels", {
+        "whitelist_only": bool, "manual_strength": float, "affinity_strength": float,
+        "affinity_enabled": bool, "affinity_half_life_days": float, "blocked_hidden": bool,
+    })
+    copy_scalars("dearrow", {
+        "enabled": bool, "replace_titles": bool, "replace_thumbnails": bool,
+        "show_original": bool, "min_votes": int, "score_from_titles": bool,
+    })
+    copy_scalars("diversity", {
+        "enabled": bool, "max_per_channel": int, "mmr_lambda": float, "warn_below": float,
+    })
+
+    if isinstance(raw.get("sponsorblock"), dict):
+        sb = raw["sponsorblock"]
+        kept: dict[str, Any] = {}
+        for key, caster in (("enabled", bool), ("max_sponsor_ratio", float),
+                            ("max_filler_ratio", float), ("hide_exclusive_access", bool),
+                            ("score_penalty", float)):
+            if key in sb:
+                try:
+                    kept[key] = caster(sb[key])
+                except (TypeError, ValueError):
+                    pass
+        from .community import SPONSOR_CATEGORIES
+        for key in ("categories", "skip"):
+            if isinstance(sb.get(key), list):
+                kept[key] = [c for c in sb[key] if c in SPONSOR_CATEGORIES]
+        if kept:
+            out["sponsorblock"] = kept
+
+    if isinstance(raw.get("sources"), dict):
+        sources = {}
+        for key in SOURCE_KEYS:
+            if key in raw["sources"]:
+                try:
+                    sources[key] = max(0, min(100, int(float(raw["sources"][key]))))
+                except (TypeError, ValueError):
+                    continue
+        if sources:
+            out["sources"] = sources
+
+    if isinstance(raw.get("weights"), dict):
+        weights = {}
+        for key in defaults["weights"]:
+            if key in raw["weights"]:
+                try:
+                    weights[key] = max(0.0, min(5.0, float(raw["weights"][key])))
+                except (TypeError, ValueError):
+                    continue
+        if weights:
+            out["weights"] = weights
+
+    if "novelty" in raw:
+        try:
+            out["novelty"] = max(0, min(100, int(float(raw["novelty"]))))
+        except (TypeError, ValueError):
+            pass
+
+    if isinstance(raw.get("targets"), dict):
+        targets = {}
+        for key, value in raw["targets"].items():
+            if key not in SCORE_KEYS or not isinstance(value, dict):
+                continue
+            try:
+                targets[key] = {
+                    "enabled": bool(value.get("enabled", False)),
+                    "target": max(0, min(100, int(float(value.get("target", 70))))),
+                    "weight": max(0.1, min(3.0, float(value.get("weight", 1.0)))),
+                }
+            except (TypeError, ValueError):
+                continue
+        if targets:
+            out["targets"] = targets
+
+    if isinstance(raw.get("filters"), dict):
+        filters = {}
+        for key, reference in defaults["filters"].items():
+            if key not in raw["filters"]:
+                continue
+            value = raw["filters"][key]
+            try:
+                if isinstance(reference, bool):
+                    filters[key] = bool(value)
+                elif isinstance(reference, list):
+                    filters[key] = [str(v)[:8] for v in value][:12] if isinstance(value, list) else []
+                elif isinstance(reference, float):
+                    filters[key] = float(value)
+                else:
+                    filters[key] = int(value)
+            except (TypeError, ValueError):
+                continue
+        if filters:
+            out["filters"] = filters
+
+    if isinstance(raw.get("budget"), dict):
+        budget: dict[str, Any] = {}
+        if "enabled" in raw["budget"]:
+            budget["enabled"] = bool(raw["budget"]["enabled"])
+        for key in ("quotas", "daily_caps"):
+            if isinstance(raw["budget"].get(key), dict):
+                budget[key] = {
+                    str(k)[:24]: max(0, int(float(v)))
+                    for k, v in raw["budget"][key].items()
+                    if _numeric(v)
+                }
+        if budget:
+            out["budget"] = budget
+
+    if isinstance(raw.get("rules"), dict):
+        expr = raw["rules"].get("expr")
+        if isinstance(expr, dict):
+            try:
+                rule_engine.validate(expr)
+                out["rules"] = {"enabled": bool(raw["rules"].get("enabled")), "expr": expr}
+            except rule_engine.RuleError:
+                pass
+
+    if isinstance(raw.get("moods"), dict):
+        moods = {}
+        for name, patch in list(raw["moods"].items())[:24]:
+            if isinstance(patch, dict):
+                moods[str(name)[:40]] = sanitise_settings(patch)
+        if moods:
+            out["moods"] = moods
+    if isinstance(raw.get("active_mood"), str):
+        out["active_mood"] = raw["active_mood"][:40]
+
+    if isinstance(raw.get("brief"), dict) and isinstance(raw["brief"].get("text"), str):
+        out["brief"] = {
+            "text": raw["brief"]["text"][:2000],
+            "summary": str(raw["brief"].get("summary", ""))[:300],
+            "compiled_at": int(raw["brief"].get("compiled_at") or 0),
+        }
+
+    return out
+
+
+def save_profile(db: Database, name: str, body: dict, author: str = "") -> None:
+    db.execute(
+        "INSERT INTO saved_profiles(name, body, author, created_at) VALUES(?,?,?,?) "
+        "ON CONFLICT(name) DO UPDATE SET body=excluded.body, author=excluded.author, "
+        "created_at=excluded.created_at",
+        (name[:80], json.dumps(body), author[:80], int(time.time())),
+    )
+
+
+def list_profiles(db: Database) -> list[dict]:
+    return [
+        {"name": r["name"], "author": r["author"], "created_at": r["created_at"]}
+        for r in db.query("SELECT name, author, created_at FROM saved_profiles ORDER BY created_at DESC")
+    ]
+
+
+def load_profile(db: Database, name: str) -> dict | None:
+    row = db.one("SELECT body FROM saved_profiles WHERE name = ?", (name,))
+    return json.loads(row["body"]) if row else None
+
+
+def _numeric(value: Any) -> bool:
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
