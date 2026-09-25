@@ -16,12 +16,18 @@ CREATE TABLE IF NOT EXISTS videos (
     genre         TEXT NOT NULL DEFAULT '',
     is_live       INTEGER NOT NULL DEFAULT 0,
     is_upcoming   INTEGER NOT NULL DEFAULT 0,
+    -- known to be a YouTube Short, even when the duration is not known
+    is_short      INTEGER NOT NULL DEFAULT 0,
     family_safe   INTEGER NOT NULL DEFAULT 1,
     sub_count     INTEGER NOT NULL DEFAULT 0,
     caption_langs TEXT NOT NULL DEFAULT '[]',
     transcript    TEXT,
     -- set only by the optional vision module; -1 means never scored
     nsfw_vision   REAL NOT NULL DEFAULT -1,
+    -- how it first arrived: subscription, playlist, history, lookup, sift
+    -- (yours) or followed, starter, search, trending (Sieve found it).
+    -- "Reset pulled videos" deletes by this. '' = arrived before it existed.
+    origin        TEXT NOT NULL DEFAULT '',
     fetched_at    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_videos_author ON videos(author_id);
@@ -99,7 +105,9 @@ CREATE TABLE IF NOT EXISTS history (
     watched_at INTEGER NOT NULL,
     progress   REAL NOT NULL DEFAULT 0,      -- 0..1 fraction of duration reached
     dwell      INTEGER NOT NULL DEFAULT 0,   -- seconds actually in the player
-    origin     TEXT NOT NULL DEFAULT 'manual'
+    origin     TEXT NOT NULL DEFAULT 'manual',
+    -- one viewing in Sieve's player; its periodic reports update one row
+    session    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_history_video ON history(video_id);
 CREATE INDEX IF NOT EXISTS idx_history_time ON history(watched_at DESC);
@@ -204,6 +212,16 @@ CREATE TABLE IF NOT EXISTS hash_prefix_log (
     PRIMARY KEY (service, prefix)
 );
 
+-- Videos you opened from Sieve. Deliberately separate from `history`: an open
+-- says nothing about how much you watched, and recording it as a watch with a
+-- token completion taught the learner that every click was a bounce.
+CREATE TABLE IF NOT EXISTS opens (
+    video_id  TEXT NOT NULL,
+    opened_at INTEGER NOT NULL,
+    provider  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_opens_video ON opens(video_id);
+
 CREATE TABLE IF NOT EXISTS http_cache (
     url        TEXT PRIMARY KEY,
     body       TEXT NOT NULL,
@@ -211,3 +229,80 @@ CREATE TABLE IF NOT EXISTS http_cache (
     expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cache_expiry ON http_cache(expires_at);
+
+-- One row per request that left this machine for YouTube or Invidious.
+-- Powers the pull limit (pulls.py) and the usage readout on Controls.
+-- Pruned after 31 days, which is the longest limit window.
+CREATE TABLE IF NOT EXISTS pulls (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    at        INTEGER NOT NULL,
+    kind      TEXT NOT NULL DEFAULT '',
+    automatic INTEGER NOT NULL DEFAULT 0   -- 1 = Sieve did it by itself
+);
+CREATE INDEX IF NOT EXISTS idx_pulls_at ON pulls(at);
+
+-- When each channel's uploads were last pulled, so a sync that cannot reach
+-- every channel (a pull limit, a short outage) starts next time with the ones
+-- it missed rather than the same first few. `failures` counts consecutive
+-- "no such channel" answers; a channel that keeps failing is rested.
+CREATE TABLE IF NOT EXISTS channel_fetches (
+    channel_id TEXT PRIMARY KEY,
+    fetched_at INTEGER NOT NULL DEFAULT 0,
+    failures   INTEGER NOT NULL DEFAULT 0,
+    origin     TEXT NOT NULL DEFAULT ''     -- subscription | followed | starter
+);
+
+-- Scores you set yourself (the video page's "I'd say" control). Your value is
+-- used for that video exactly, and all of them together train a correction
+-- model (corrections.py) that adjusts similar videos.
+CREATE TABLE IF NOT EXISTS score_overrides (
+    video_id   TEXT NOT NULL,
+    axis       TEXT NOT NULL,
+    value      REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (video_id, axis)
+);
+
+-- Your notes on a video, optionally at a moment in it. Exported to Obsidian,
+-- Logseq or Readwise from the Library page.
+CREATE TABLE IF NOT EXISTS notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id   TEXT NOT NULL,
+    at_second  INTEGER,              -- NULL = about the whole video
+    text       TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notes_video ON notes(video_id);
+
+-- Videos saved for offline viewing (downloads.py).
+CREATE TABLE IF NOT EXISTS downloads (
+    video_id   TEXT PRIMARY KEY,
+    status     TEXT NOT NULL DEFAULT 'queued',   -- queued | downloading | done | failed
+    progress   REAL NOT NULL DEFAULT 0,          -- 0..1
+    quality    TEXT NOT NULL DEFAULT '720',
+    path       TEXT NOT NULL DEFAULT '',
+    bytes      INTEGER NOT NULL DEFAULT 0,
+    error      TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+-- New uploads from channels you asked to be alerted about (notify.py).
+CREATE TABLE IF NOT EXISTS alerts (
+    video_id   TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    seen       INTEGER NOT NULL DEFAULT 0,
+    sent       INTEGER NOT NULL DEFAULT 0
+);
+
+-- Which fetch keyword found which video, so changing your keywords refetches
+-- only the new ones, and removing one removes only the videos no other
+-- keyword or source still wants (ingest.Ingestor.fetch).
+CREATE TABLE IF NOT EXISTS keyword_results (
+    keyword    TEXT NOT NULL,
+    video_id   TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (keyword, video_id)
+);
+CREATE INDEX IF NOT EXISTS idx_keyword_results_video ON keyword_results(video_id);

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Library · Sieve{% endblock %}
+
+{% block body %}
+<h1>Library</h1>
+<p class="lede">Search what you already have, watch offline, catch new uploads, export your notes.</p>
+
+<section class="panel" id="search">
+  <h2>Search your catalogue</h2>
+  <form method="get" action="/library" class="search-row">
+    <input type="search" name="q" value="{{ q }}" placeholder="heap exploitation, byzantine history…" aria-label="Search">
+    <label class="check inline"><input type="checkbox" name="unwatched" value="true" {{ 'checked' if unwatched }}> Unwatched</label>
+    <label class="inline-num">Min <input type="number" name="min_duration" min="0" step="60" value="{{ min_duration or '' }}" placeholder="any"> s</label>
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <p class="hint">Finds related wording too, not only exact words. Searches only what Sieve already has; use
+    <a href="/sift">Sift</a> to search YouTube.</p>
+  {% if q %}
+    {% if results %}
+      <ol class="results">
+        {% for r in results %}
+          <li>
+            <a href="/video/{{ r.id }}">{{ r.title }}</a>
+            <span class="muted">{{ r.author }}{% if r.duration %} · {{ r.duration | duration }}{% endif %}</span>
+            <span class="match mono" title="How closely it matches">{{ (r.match * 100) | round | int }}%</span>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">Nothing in your catalogue matches “{{ q }}”. Try <a href="/sift?q={{ q | urlencode }}&run=1">Sift</a>.</p>
+    {% endif %}
+  {% endif %}
+</section>
+
+<div class="cols-2">
+  <section class="panel" id="downloads" data-downloads>
+    <h2>Offline</h2>
+    {% if not can_download %}
+      <p class="hint">Saving videos needs yt-dlp: <span class="mono">pip install 'sieve[youtube]'</span>.</p>
+    {% endif %}
+    {% if downloads_list %}
+      <ul class="rows">
+        {% for d in downloads_list %}
+          <li>
+            <span class="grow">
+              {% if d.status == 'done' %}<a href="/play/{{ d.video_id }}">{{ d.title or d.video_id }}</a>
+              {% else %}{{ d.title or d.video_id }}{% endif %}
+              <span class="muted">
+                {% if d.status == 'done' %}{{ d.bytes | filesize }} · {{ d.quality }}p
+                {% elif d.status == 'downloading' %}downloading {{ (d.progress * 100) | round | int }}%
+                {% elif d.status == 'queued' %}waiting{% if d.error %} — {{ d.error | sentence }}{% endif %}
+                {% else %}failed: {{ d.error | sentence }}{% endif %}
+              </span>
+            </span>
+            {% if d.status == 'failed' or (d.status == 'queued' and d.error) %}
+              <button class="btn ghost" type="button" data-action="/api/downloads" data-reload
+                      data-body='{"video_id": "{{ d.video_id }}", "quality": "{{ d.quality }}"}'>Retry</button>
+            {% endif %}
+            {% if 'not a bot' in (d.error or '') or 'Controls, Source' in (d.error or '') %}
+              <a class="btn ghost" href="/settings#youtube-sign-in">Add cookies</a>
+            {% endif %}
+            <button class="btn ghost" type="button" data-action="/api/downloads/{{ d.video_id }}" data-method="DELETE"
+                    data-reload data-confirm="Delete this saved video?">Delete</button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Nothing saved. Use “Save offline” on a video's page.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" id="alerts">
+    <h2>New uploads</h2>
+    {% if alerts %}
+      <ul class="rows">
+        {% for a in alerts %}
+          <li><span class="grow"><a href="/video/{{ a.video_id }}">{{ a.title }}</a> <span class="muted">{{ a.author }} · {{ a.created_at | ago }}</span></span></li>
+        {% endfor %}
+      </ul>
+      <p class="wrap-actions"><button class="btn ghost" type="button" data-action="/api/alerts/seen" data-reload>Mark all seen</button></p>
+    {% else %}
+      <p class="muted">No new uploads{% if not alerted %}. Turn on the bell for a channel on any video's page{% endif %}.</p>
+    {% endif %}
+    {% if alerted %}
+      <p class="hint">Alerts on for: {% for c in alerted %}{{ c.name or c.channel_id }}{{ ', ' if not loop.last }}{% endfor %}.</p>
+    {% endif %}
+    <p class="hint">Also as RSS: <a href="/feeds/alerts.xml">alerts</a> · <a href="/feeds/digest.xml">digest</a>.
+      Phone notifications: Controls, Notifications.</p>
+    {% if digest.text %}
+      <h3>Latest digest <span class="muted">({{ digest.at | ago }})</span></h3>
+      <pre class="digest">{{ digest.text }}</pre>
+    {% endif %}
+    <p class="wrap-actions"><button class="btn ghost" type="button" data-action="/api/digest" data-reload>Write a digest now</button></p>
+  </section>
+</div>
+
+<section class="panel" id="export">
+  <h2>Export notes</h2>
+  <p class="hint">{{ note_count }} note{{ '' if note_count == 1 else 's' }} so far. Add them on any video's page, at a moment or for the whole video.</p>
+  <form method="get" action="/api/export/notes" class="search-row">
+    <label>Format
+      <select name="format">
+        <option value="obsidian">Obsidian (Markdown zip)</option>
+        <option value="logseq">Logseq (Markdown zip)</option>
+        <option value="readwise">Readwise (CSV)</option>
+      </select></label>
+    <label class="check inline"><input type="checkbox" name="watched" value="true"> Also every video I watched</label>
+    <button class="btn" type="submit">Download</button>
+  </form>
+</section>
+{% endblock %}

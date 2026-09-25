@@ -176,6 +176,9 @@ def recompute_affinity(db: Database, half_life_days: float = 45.0) -> int:
         """
     )
     if not rows:
+        # Same reasoning as interests: no history means no derived affinity.
+        db.execute("UPDATE channels SET affinity = 0, watch_seconds = 0, watch_count = 0, "
+                   "completion = 0, last_watched = 0")
         return 0
 
     now = time.time()

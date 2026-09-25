@@ -3,13 +3,10 @@
 
 {% block body %}
 <h1>Brief</h1>
-<p class="lede">Describe what you want to watch. It gets compiled into settings once, shown to you as a diff, and applied only if you agree. The ranking itself never calls a model, so your homepage stays fast and reproducible.</p>
+<p class="lede">Describe what you want in plain words. You see the resulting settings before anything changes.</p>
 
 {% if cfg.llm_provider == 'none' %}
-  <div class="notice">
-    No language model is configured, so this falls back to keyword matching, which is noticeably dumber.
-    Set <span class="mono">llm_provider = "ollama"</span> in your config to use a local model.
-  </div>
+  <div class="notice">No language model set up, so this uses simple keyword matching. For better results, set <span class="mono">llm_provider = "ollama"</span> in your config.</div>
 {% endif %}
 
 <div class="cols-2">
@@ -90,7 +87,7 @@
       <pre>{{ compiled.patch.rules.expr | tojson(indent=2) }}</pre>
     {% endif %}
 
-    <p class="hint">Compiled by {{ compiled.provider }}. Anything the model produced that Sieve does not recognise was discarded before you saw this.</p>
+    <p class="hint">Made by {{ compiled.provider }}. Anything Sieve doesn't recognise was dropped.</p>
   {% endif %}
 </section>
 </div>

@@ -4,20 +4,61 @@
 {% block body %}
 <h1>{{ video.title }}</h1>
 <p class="lede">
-  <a href="/channels?q={{ video.author_id }}">{{ video.author }}</a> ·
-  <span class="mono">{{ video.duration | duration }}</span> ·
-  <span class="mono">{{ video.views | count }} views</span> ·
-  <span class="mono">{{ video.published | ago }}</span>
+  <a href="/channels?q={{ video.author_id }}">{{ video.author or "Unknown channel" }}</a>
+  {%- if video.duration %} · <span class="mono">{{ video.duration | duration }}</span>{% endif %}
+  {%- if video.views %} · <span class="mono">{{ video.views | count }} view{{ '' if video.views == 1 else 's' }}</span>{% endif %}
+  {%- if video.published %} · <span class="mono">{{ video.published | ago }}</span>{% endif %}
 </p>
 
+{% if video.id | length == 11 %}
+<div class="wrap-actions video-tools">
+  {% if download and download.status == 'done' %}
+    <a class="btn ghost" href="/play/{{ video.id }}">Play offline copy</a>
+  {% elif download and download.status in ('queued', 'downloading') %}
+    <span class="tag">Saving… {{ (download.progress * 100) | round | int }}%</span>
+  {% elif can_download %}
+    <select id="dl-quality" aria-label="Quality">
+      {% for q in ['360', '480', '720', '1080'] %}<option value="{{ q }}" {{ 'selected' if q == '720' }}>{{ q }}p</option>{% endfor %}
+    </select>
+    <button class="btn ghost" type="button" data-download="{{ video.id }}">Save offline</button>
+  {% endif %}
+  <button class="btn ghost" type="button" data-action="/api/channels/{{ video.author_id }}/alert"
+          data-body='{"on": {{ 'false' if alerting else 'true' }}}' data-reload
+          title="Get told about this channel's new uploads">{{ '🔔 Alerts on' if alerting else '🔕 Alert me' }}</button>
+</div>
+{% endif %}
+
+
+
+{% if not playable(video.id) %}
+  <div class="notice with-action">
+    <span>This is a demo video and cannot be played. Fetch real videos to replace the demo.</span>
+    <button class="btn" type="button" data-action="/api/catalogue/remove-demo"
+            data-confirm="Delete the demo videos, their made-up watch history and what was learned from it?">Remove demo videos</button>
+  </div>
+{% elif resume %}
+  <p class="hint">Picks up at <span class="mono">{{ resume | duration }}</span>, where you left off.</p>
+{% endif %}
+
 <p class="wrap-actions" data-video="{{ video.id }}">
-  <a class="btn" href="{{ watch_base }}{{ video.id }}" data-watch="{{ video.id }}" rel="noreferrer">Watch</a>
-  <button class="btn ghost" data-feedback="more">More like this</button>
-  <button class="btn ghost" data-feedback="less">Less like this</button>
+  {% for link in watch_links %}
+    <a class="btn{{ '' if link.default else ' ghost' }}" href="/open/{{ video.id }}?via={{ link.provider }}"
+       rel="noreferrer noopener" {% if new_tab and not link.app %}target="_blank"{% endif %}>
+      {{- 'Watch on ' if link.default else '' }}{{ link.label }}</a>
+  {% endfor %}
+  <button class="btn ghost" data-feedback="more" aria-pressed="{{ 'true' if feedback_now == 'more' else 'false' }}" title="Click again to undo">More like this</button>
+  <button class="btn ghost" data-feedback="less" aria-pressed="{{ 'true' if feedback_now == 'less' else 'false' }}" title="Click again to undo">Less like this</button>
   <button class="btn ghost" data-feedback="deeper">Same topic, more technical</button>
   <button class="btn ghost" data-feedback="shorter">Same topic, shorter</button>
   <button class="btn danger" data-feedback="block_channel">Block this channel</button>
 </p>
+<details class="explain" data-explain="{{ video.id }}">
+  <summary>Tell Sieve why{{ ' (in your own words)' }}</summary>
+  <textarea rows="2" placeholder="e.g. too much drama; I only want the technical parts"></textarea>
+  <p class="wrap-actions"><button class="btn" type="button">Send</button>
+    <span class="explain-result muted"></span></p>
+  <p class="hint">Changes what Sieve recommends from now on — for videos like this one, not only this one.</p>
+</details>
 
 <div class="cols-2">
 
@@ -30,11 +71,16 @@
           <i data-k="{{ part.key }}" style="width: {{ part.percent }}%"></i>
         {% endfor %}
       </div>
-      <ul class="legend" style="margin-top:.5rem">
-        {% for part in explanation %}
-          <li><span class="pct {{ 'neg' if part.negative }}">{{ part.percent }}%</span><span>{{ part.label }}</span></li>
-        {% endfor %}
-      </ul>
+      <ul class="whyrows">
+          {% set ns = namespace(offset=0) %}
+          {% for part in explanation %}
+            <li>
+              <span class="label">{{ part.label }}</span>
+              <span class="track">{% if not part.negative %}<i data-k="{{ part.key }}" style="left: {{ ns.offset }}%; width: {{ part.percent }}%"></i>{% set ns.offset = ns.offset + part.percent %}{% else %}<i data-k="penalty" style="right: 0; width: {{ [part.percent, 100] | min }}%"></i>{% endif %}</span>
+              <span class="pct {{ 'neg' if part.negative }}">{{ '−' if part.negative }}{{ part.percent | abs }}%</span>
+            </li>
+          {% endfor %}
+        </ul>
     </div>
   {% else %}
     <p class="muted">This video has not appeared on your homepage yet, so there is no ranking to explain.</p>
@@ -58,6 +104,11 @@
     </ul>
   {% endif %}
 
+  {% if not segments.segments and sponsor_problem %}
+    <h3>SponsorBlock</h3>
+    <p class="notice">Sponsor segments could not be looked up: {{ sponsor_problem.title | lower }}.
+      Only sponsor skipping and sponsor-based ranking are affected — the video itself loads and plays normally.</p>
+  {% endif %}
   {% if segments.segments %}
     <h3>SponsorBlock</h3>
     <p class="hint">
@@ -85,15 +136,17 @@
   {% if not card %}
     <p class="muted">Not scored yet.</p>
   {% else %}
-    <p class="hint">Each score is a linear model, so the contributions below are exact rather than approximated.</p>
+    <p class="hint">What pushed each score up or down.</p>
     {% for key, value in card.scores.items() %}
       <div style="margin-bottom:.7rem">
         <div class="sparkrow">
-          <span><b>{{ key.replace('_', ' ') }}</b></span>
+          <span><b>{{ key.replace('_', ' ') | capitalize }}</b>{% if key in overrides %} <span class="tag high">{{ 'by AI' if override_source.get(key) == 'ai' else 'yours' }}</span>
+            <span class="muted" style="font-size:.76rem">predicted {{ predicted.get(key, '?') }}</span>{% endif %}</span>
           <span class="track"><i style="width: {{ value | round | int }}%"></i></span>
           <span class="val">{{ value | round | int }}</span>
         </div>
-        <ul class="legend" style="margin-left:0">
+
+        <ul class="breakdown">
           {% for part in breakdown.get(key, []) %}
             <li>
               <span class="pct {{ 'neg' if part.direction == 'down' }}">{{ "%+.0f" | format(part.effect) }}</span>
@@ -101,6 +154,16 @@
             </li>
           {% endfor %}
         </ul>
+        <details class="override">
+          <summary>{{ 'Change your value' if key in overrides else 'Wrong? Correct it' }}</summary>
+          <div class="override-row" data-override="{{ key }}" data-video="{{ video.id }}">
+            <input type="range" min="0" max="100" value="{{ value | round | int }}" aria-label="Your {{ key }} score">
+            <output>{{ value | round | int }}</output>
+            <button class="btn" type="button" data-override-save>Save</button>
+            {% if key in overrides %}<button class="btn ghost" type="button" data-override-clear>Use the engine's</button>{% endif %}
+          </div>
+          <p class="hint">Your value is used for this video, and teaches Sieve to score similar videos better.</p>
+        </details>
       </div>
     {% endfor %}
 
@@ -112,4 +175,39 @@
 </section>
 
 </div>
+{% if chapters %}
+<section class="panel">
+  <h2>Chapters</h2>
+  <ol class="chapters">
+    {% for c in chapters %}
+      <li><a href="/play/{{ video.id }}?t={{ c.at }}"><span class="mono">{{ c.at | timecode }}</span> {{ c.title }}</a></li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+<section class="panel" id="notes">
+  <h2>Notes</h2>
+  {% if notes %}
+    <ul class="rows">
+      {% for n in notes %}
+        <li>
+          <span class="grow">
+            {% if n.at_second is not none %}<a class="mono" href="/play/{{ video.id }}?t={{ n.at_second }}">{{ n.at_second | timecode }}</a>{% endif %}
+            {{ n.text }}
+          </span>
+          <button class="btn ghost" type="button" data-action="/api/notes/{{ n.id }}" data-method="DELETE" data-reload>Delete</button>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  <div class="note-form" data-note-form="{{ video.id }}">
+    <textarea rows="2" placeholder="A thought, a quote, something to look up…" aria-label="Note"></textarea>
+    <div class="wrap-actions">
+      <label class="inline-num">At <input type="text" placeholder="m:ss" size="6" aria-label="At a moment (optional)"></label>
+      <button class="btn" type="button">Add note</button>
+    </div>
+  </div>
+  <p class="hint">Export notes to Obsidian, Logseq or Readwise from the <a href="/library#export">Library</a>.</p>
+</section>
 {% endblock %}

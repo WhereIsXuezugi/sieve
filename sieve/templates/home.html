@@ -2,8 +2,19 @@
 {% block title %}Sieve{% endblock %}
 
 {% block body %}
+{# Where a card links: /open for real videos, the Sieve page for demo ones.
+   Desktop-app providers never get target=_blank, which would strand an empty tab. #}
+
+{% if playback_unconfigured and 'playback' not in dismissed %}
+<div class="notice with-action" id="playback-notice" data-dismiss="playback">
+  <span>Videos play in Sieve's built-in player. Prefer Invidious or another player?</span>
+  <a class="btn ghost" href="/settings#playback">Choose where videos open</a>
+  <button class="dismiss" type="button" aria-label="Dismiss">×</button>
+</div>
+{% endif %}
 
 {% set d = diagnostics %}
+{% if items or (empty and empty.kind in ("filtered", "nomatch")) %}
 <div class="readout">
   <div><b>{{ d.shown }}</b><small>on the page</small></div>
   <div><b>{{ d.pool }}</b><small>candidates ranked</small></div>
@@ -19,20 +30,50 @@
     <small>{{ d.model.samples }} feedback samples</small>
   </div>
 </div>
+{% endif %}
 
-{% if d.rabbit_hole %}
-<div class="notice">
-  Your homepage has narrowed: <b>{{ d.rabbit_hole.share }}%</b> of it is about
-  “{{ d.rabbit_hole.topic }}”, and topic diversity has dropped to
-  {{ d.rabbit_hole.diversity }}%.
-  <form method="post" action="/settings">
-    <input type="hidden" name="novelty" value="{{ [settings.novelty + 25, 100] | min }}">
-    {% for key in ['subscriptions','history','playlists','discovery','interests','niche'] %}
-      <input type="hidden" name="sources.{{ key }}" value="{{ settings.sources[key] }}">
-    {% endfor %}
-    <button class="btn" type="submit">Raise novelty to {{ [settings.novelty + 25, 100] | min }}</button>
-  </form>
+{% if d.rabbit_hole and ('narrow-' ~ d.rabbit_hole.topic) not in dismissed %}
+<div class="notice with-action" data-dismiss="narrow-{{ d.rabbit_hole.topic }}">
+  <span>Your page is narrowing: <b>{{ d.rabbit_hole.share }}%</b> of the videos with a topic are about
+  “{{ d.rabbit_hole.topic }}”. Topic variety is {{ d.rabbit_hole.diversity }}%
+  <span class="muted">(how evenly the page spreads across topics; 100% is perfectly even)</span>.</span>
+  {% set raised = [settings.novelty + 25, 100] | min %}
+  <button class="btn" type="button" data-action="/api/settings"
+          data-body='{"novelty": {{ raised }}}' data-reload>Show more variety</button>
+  <button class="dismiss" type="button" aria-label="Dismiss">×</button>
 </div>
+{% endif %}
+
+{% if demo_only and 'demo' not in dismissed %}
+<div class="notice with-action" data-dismiss="demo">
+  <span>These are demo videos and cannot be played. Fetch real ones — they replace the demo.</span>
+  <span class="wrap-actions">
+    <button class="btn" type="button" data-action="/api/fetch" data-reload>Fetch real videos</button>
+    <a class="btn ghost" href="/settings#pulling">Topics and limits</a>
+  </span>
+  <button class="dismiss" type="button" aria-label="Dismiss">×</button>
+</div>
+{% endif %}
+
+{% if items and d.short_by and 'short' not in dismissed %}
+<div class="notice with-action" data-dismiss="short">
+  <span>Showing {{ items | length }} of {{ settings.homepage.count }}
+  {%- if d.short_reason %} ({{ d.short_reason }}){% endif %}.</span>
+  {% if d.fill != 'relaxed' %}
+    <button class="btn ghost" type="button" data-action="/api/settings"
+            data-body='{"homepage": {"fill": "relaxed"}}' data-reload>Fill the page anyway</button>
+  {% endif %}
+  <button class="dismiss" type="button" aria-label="Dismiss">×</button>
+</div>
+{% endif %}
+
+{% if d.new_videos_at %}
+<p class="hint">New videos {{ d.new_videos_at | until }}. <a href="/settings#homepage">Change</a></p>
+{% endif %}
+
+{% if d.filled %}
+<p class="hint">{{ d.filled }} extra video{{ '' if d.filled == 1 else 's' }} added to fill the page, marked under the title.
+  <a href="/settings#homepage">Change</a></p>
 {% endif %}
 
 <div class="wrap-actions" style="margin-bottom:1rem">
@@ -46,92 +87,83 @@
       </select>
     </label>
   </form>
-  <a class="btn ghost" href="/?refresh=1">Reshuffle</a>
+  {% if items %}<a class="btn ghost" href="/?refresh=1">Reshuffle</a>{% endif %}
   <span class="muted" style="font-size:.83rem">
-    {{ settings.homepage.mode }} mode ·
-    {% for bucket, n in d.buckets.items() %}{{ bucket }} {{ n }}{{ ", " if not loop.last }}{% endfor %}
+    {{ mode_label }}{% if d.buckets %}:
+    {% for bucket, n in d.buckets.items() %}{{ n }} {{ bucket }}{{ ", " if not loop.last }}{% endfor %}{% endif %}
   </span>
 </div>
 
 {% if not items %}
+  {% set e = empty %}
+  {% set plan = fetch_plan %}
   <div class="empty">
-    <p>{{ empty_hint }}</p>
-    <p><a class="btn ghost" href="/settings">Open the controls</a></p>
+  {% if e.kind == 'start' %}
+    <h2>{{ 'Your catalogue is empty' if e.fetched_before else 'Ready when you are' }}</h2>
+    {% if plan.ready %}
+      <p>Fetch finds videos for {{ plan.topics | join(', ') }}: about {{ plan.requests }}
+         request{{ '' if plan.requests == 1 else 's' }} to YouTube
+         {%- if plan.channels %} ({{ plan.channels }} channel{{ '' if plan.channels == 1 else 's' }}
+         {%- if plan.searches %} and {{ plan.searches }} search{{ '' if plan.searches == 1 else 'es' }}{% endif %}){% endif %}.
+         {% if plan.remaining is not none %}Your pull limit has {{ plan.remaining }} left.{% endif %}
+         Nothing is fetched until you press the button, so change the topics or limits first if you like.</p>
+    {% else %}
+      <p>Choose at least one topic, or add a search phrase, then fetch. Nothing is fetched until you ask.</p>
+    {% endif %}
+    <p class="wrap-actions">
+      {% if plan.ready %}<button class="btn" type="button" data-action="/api/fetch" data-reload>Fetch videos</button>{% endif %}
+      <a class="btn ghost" href="/settings#pulling">{{ 'Change topics and limits' if plan.ready else 'Choose topics' }}</a>
+      <a class="btn ghost" href="/settings#data">Import subscriptions instead</a>
+    </p>
+  {% elif e.kind == 'limit' %}
+    <h2>Request limit reached</h2>
+    <p>{{ e.detail | sentence }}</p>
+    <p class="wrap-actions">
+      <a class="btn" href="/settings#pulling">Change the limit</a>
+      <button class="btn ghost" type="button" data-action="/api/pulls/reset" data-reload
+              data-confirm="Reset the request count to zero?">Reset count</button>
+    </p>
+  {% elif e.kind == 'unreachable' %}
+    <h2>Could not reach YouTube or Invidious</h2>
+    <p>The last attempt said: <span class="mono">{{ e.detail | sentence }}</span></p>
+    <p>The health check shows which service is failing.</p>
+    <p class="wrap-actions">
+      <button class="btn" type="button" data-action="/api/fetch" data-reload>Try again</button>
+      <a class="btn ghost" href="/debugger#doctor">Open the health check</a>
+    </p>
+  {% elif e.kind == 'waiting' %}
+    <h2>You've seen everything for now</h2>
+    <p>New videos {{ e.at | until }}, as you chose.</p>
+    <p class="wrap-actions"><a class="btn ghost" href="/settings#homepage">Change how often</a></p>
+  {% elif e.kind == 'filtered' %}
+    <h2>Your filters removed everything</h2>
+    <p>The biggest cause: {{ e.reason }} ({{ e.count }} video{{ '' if e.count == 1 else 's' }}).</p>
+    <p class="wrap-actions">
+      {% if e.fill != 'relaxed' %}
+        <button class="btn" type="button" data-action="/api/settings"
+                data-body='{"homepage": {"fill": "relaxed"}}' data-reload>Fill the page anyway</button>
+      {% endif %}
+      <a class="btn ghost" href="/funnel">See what was removed</a>
+      <a class="btn ghost" href="/settings">Open the controls</a>
+    </p>
+  {% else %}
+    <h2>Nothing matched your sources</h2>
+    <p>{% if e.mode == 'playlist' %}The playlist chosen for the homepage is empty or has not been imported.
+       {% elif e.mode == 'continue' %}You have no unfinished videos.
+       {% elif e.mode == 'subscriptions' %}None of your subscriptions has uploaded anything Sieve knows about.
+       {% else %}Every source is set to zero, or none of them found anything.{% endif %}</p>
+    <p class="wrap-actions"><a class="btn" href="/settings#homepage">Open the controls</a></p>
+  {% endif %}
   </div>
 {% else %}
+<form class="home-search" data-home-search role="search">
+  <input type="search" placeholder="Find on this page…" aria-label="Find videos on this page">
+  <span class="search-status muted" aria-live="polite"></span>
+</form>
 <div class="grid {{ settings.homepage.density }}" data-cols="{{ settings.homepage.columns }}">
   {% for item in items %}
     {% set v = item.video %}
-    <article class="card" data-video="{{ v.id }}">
-      <div class="thumbwrap">
-        <a href="{{ watch_base }}{{ v.id }}" data-watch="{{ v.id }}" rel="noreferrer">
-          <img class="thumb" src="{{ item.thumb }}" alt="" loading="lazy" width="320" height="180">
-        </a>
-        <span class="runtime">{{ v.duration | duration }}</span>
-        {% if item.c.progress > 0 %}
-          <span class="resume"><i style="width: {{ (item.c.progress * 100) | round | int }}%"></i></span>
-        {% endif %}
-      </div>
-
-      <a class="title" href="{{ watch_base }}{{ v.id }}" data-watch="{{ v.id }}" rel="noreferrer">
-        {{ item.display_title.text }}
-      </a>
-      {% if item.display_title.original %}
-        <div class="retitled">DeArrow retitled. Original: {{ item.display_title.original }}</div>
-      {% endif %}
-
-      <div class="byline">
-        <a href="/channels?q={{ v.author_id }}">{{ v.author }}</a>
-        <span class="num">{{ v.views | count }} views</span>
-        <span class="num">{{ v.published | ago }}</span>
-        {% if v.sponsor and v.sponsor.sponsor_ratio > 0.01 %}
-          <span class="num" title="SponsorBlock">{{ (v.sponsor.sponsor_ratio * 100) | round | int }}% sponsor</span>
-        {% endif %}
-      </div>
-
-      {% if settings.homepage.show_scores %}
-        {% set c = item.c.card %}
-        <div class="scores">
-          <span class="{{ 'hi' if c.scores.education >= 70 }}">edu {{ c.scores.education | round | int }}</span>
-          <span class="{{ 'hi' if c.scores.info_density >= 70 }}">dens {{ c.scores.info_density | round | int }}</span>
-          <span class="{{ 'lo' if c.scores.brainrot >= 55 }}">rot {{ c.scores.brainrot | round | int }}</span>
-          <span class="{{ 'lo' if c.scores.clickbait >= 60 }}">bait {{ c.scores.clickbait | round | int }}</span>
-          <span>tech {{ c.scores.technical_depth | round | int }}</span>
-        </div>
-      {% endif %}
-
-      {% if settings.homepage.show_explanations and item.explanation %}
-        <div class="why">
-          <div class="bar" role="img"
-               aria-label="Why this appears: {% for part in item.explanation %}{{ part.percent }}% {{ part.label }}{{ '; ' if not loop.last }}{% endfor %}">
-            {% for part in item.explanation if not part.negative %}
-              <i data-k="{{ part.key }}" style="width: {{ part.percent }}%"></i>
-            {% endfor %}
-          </div>
-          <details>
-            <summary>Why this is here</summary>
-            <ul class="legend">
-              {% for part in item.explanation %}
-                <li>
-                  <span class="pct {{ 'neg' if part.negative }}">{{ part.percent }}%</span>
-                  <span>{{ part.label }}</span>
-                </li>
-              {% endfor %}
-            </ul>
-            <p style="margin:.3rem 0 0"><a href="/video/{{ v.id }}" class="muted" style="font-size:.76rem">Full breakdown</a></p>
-          </details>
-        </div>
-      {% endif %}
-
-      <div class="actions">
-        <button data-feedback="more" title="More like this">more</button>
-        <button data-feedback="less" title="Less like this">less</button>
-        <button data-feedback="deeper" title="Same topic, more technical">deeper</button>
-        <button data-feedback="shorter" title="Same topic, shorter">shorter</button>
-        <button data-feedback="higher_quality" title="Same topic, better made">better</button>
-        <button data-hide="1" title="Hide this video">hide</button>
-      </div>
-    </article>
+    {% include "_card.html" %}
   {% endfor %}
 </div>
 {% endif %}

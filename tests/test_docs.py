@@ -15,6 +15,7 @@ import pytest
 
 from sieve.app import create_app
 from sieve.config import Config
+from tests.support import offline_config
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = sorted([*ROOT.glob("*.md"), *(ROOT / "docs").glob("*.md"), *(ROOT / ".github").rglob("*.md")])
@@ -22,7 +23,7 @@ DOCS = sorted([*ROOT.glob("*.md"), *(ROOT / "docs").glob("*.md"), *(ROOT / ".git
 
 @pytest.fixture(scope="module")
 def schema(tmp_path_factory):
-    app = create_app(Config(data_dir=str(tmp_path_factory.mktemp("docs"))), start_worker=False)
+    app = create_app(offline_config(tmp_path_factory.mktemp("docs")), start_worker=False)
     return app.openapi()
 
 
@@ -160,3 +161,11 @@ def test_internal_links_resolve(path):
         if not target.startswith("http") and not (path.parent / target).resolve().exists():
             broken.append(target)
     assert not broken, f"broken links in {path.relative_to(ROOT)}: {broken}"
+
+
+def test_operation_ids_are_unique(schema):
+    """Regression: one route serving GET and HEAD gave both the same operation
+    id, which makes the published schema invalid for client generators."""
+    ids = [op.get("operationId") for ops in schema["paths"].values() for op in ops.values()]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    assert not duplicates, f"duplicate operation ids: {duplicates}"

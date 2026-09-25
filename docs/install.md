@@ -4,10 +4,11 @@ Sieve needs Python 3.11 or newer and about 200 MB of disk for a typical
 catalogue. It has five runtime dependencies, no build step, no compiler, and no
 second daemon.
 
-It also needs an [Invidious](https://github.com/iv-org/invidious) instance to
-read from. Your own is strongly preferred — Sieve makes a lot of API calls while
-it warms the catalogue, and pointing that at someone else's public instance is
-rude. A public instance is fine for trying it out.
+It does **not** need an [Invidious](https://github.com/iv-org/invidious)
+instance: it can read YouTube directly. If you do run Invidious, Sieve uses it
+while it answers and falls back to YouTube when it does not — see
+[Getting videos](configuration.md#getting-videos). Please do not point it at
+someone else's public instance: warming the catalogue makes a lot of requests.
 
 ## Contents
 
@@ -24,28 +25,27 @@ rude. A public instance is fine for trying it out.
 
 ## Try it without an instance
 
-The fastest way to find out whether you like the shape of the thing. This builds
-a synthetic catalogue of 400 videos across ten invented channels, with a
-plausible watch history, and trains the ranker on it. No network, no account,
-nothing to clean up afterwards except one directory.
+No Invidious, no account, no export file. Sieve pulls real videos for a few
+topics from YouTube's public feeds and ranks them:
 
 ```bash
 git clone https://github.com/whereixuezugi/sieve
 cd sieve
-pip install -e .
+pip install -e '.[youtube]'   # yt-dlp is optional; it adds durations and search
 
-sieve demo
+sieve fetch --topics science,history,programming
 sieve serve
 ```
 
-Open <http://127.0.0.1:8377>. Every control works; the videos are fictional, so
-the thumbnails and watch links will not resolve.
+Open <http://127.0.0.1:8377>. The videos are real and play in Sieve's own
+player. Or skip the `fetch` line and press **Fetch** in the page header once
+you have looked at the controls — nothing is fetched until you do.
 
-> [!TIP]
-> Set `SIEVE_DATA_DIR=/tmp/sieve-demo` before both commands to keep the demo out
-> of your real data directory.
-
----
+With no network at all, `sieve demo --synthetic` builds 400 invented videos
+across ten made-up channels, with a plausible watch history, so every control
+can still be tried. Those cannot be played anywhere, and real videos replace
+them automatically on the first successful pull, or `sieve demo remove` clears
+them now.
 
 ## From source
 
@@ -88,27 +88,21 @@ nothing installed here.
 docker compose up -d
 ```
 
-The compose file expects your Invidious to be reachable as `invidious:3000` on
-the same network. Edit `SIEVE_INSTANCES` and `SIEVE_WATCH_BASE` in
-`docker-compose.yml` to match your setup.
+That is the whole setup: no Invidious needed. The image includes yt-dlp and
+runs as an unprivileged user, and the compose file keeps your data in the
+`sieve-data` volume. Open <http://127.0.0.1:8377> and import your
+subscriptions on the Controls page.
 
-To run the image on its own:
-
-```bash
-docker build -t sieve .
-docker run -d --name sieve \
-  -p 127.0.0.1:8377:8377 \
-  -v sieve-data:/data \
-  -e SIEVE_INSTANCES=http://your-invidious:3000 \
-  -e SIEVE_WATCH_BASE='http://your-invidious:3000/watch?v=' \
-  sieve
-```
+To use your own Invidious as well, uncomment `SIEVE_INSTANCES` in
+`docker-compose.yml`. Updating, backups, running without Compose and every
+environment variable are covered in the README's
+[Running with Docker](../README.md#running-with-docker).
 
 CLI commands run inside the container:
 
 ```bash
-docker exec sieve sieve doctor
-docker exec sieve sieve sync
+docker compose exec sieve sieve doctor
+docker compose exec sieve sieve sync
 ```
 
 > [!IMPORTANT]
@@ -133,7 +127,8 @@ instances  = ["http://127.0.0.1:3000"]
 watch_base = "http://127.0.0.1:3000/watch?v="
 ```
 
-`instances` is a failover list, not a load-balancing pool. Sieve uses the first
+You only need this if you run Invidious; without it, Sieve reads YouTube
+directly. `instances` is a failover list, not a load-balancing pool. Sieve uses the first
 one that answers and stays on it until it stops answering. Extra entries are
 insurance, not throughput.
 
@@ -249,6 +244,15 @@ Only public and unlisted playlists can be read. YouTube's own Watch Later is
 private to your Google account and not reachable through Invidious — keep a
 public or unlisted playlist on your Invidious account for that purpose instead.
 
+### Choosing where videos open
+
+Out of the box, videos open at an Invidious on `127.0.0.1:3000`. If that is not
+where yours runs, pick a provider under **Controls, Playback** — Invidious or
+Piped at an address you give, YouTube, YouTube's no-cookie domain, the FreeTube
+app, or your own URL template. **Open a test video** in that panel checks the
+choice in one click. `sieve doctor` flags the unconfirmed default, and its full
+check (`GET /api/doctor?quick=false`) tests whether anything answers there.
+
 ### First run
 
 ```bash
@@ -341,6 +345,29 @@ sieve score --all
 ```
 
 ---
+
+## Starting over
+
+**Controls, Danger zone** has two resets, and both write a backup first:
+
+| | Deletes | Keeps |
+|---|---|---|
+| **Delete all videos** | the catalogue, scores and cached lookups | subscriptions, history, channel settings, interests, playlists, controls, profiles |
+| **Factory reset** | everything | nothing |
+
+Both ask you to type `reset`. From the command line:
+
+```bash
+sieve reset catalogue
+sieve reset everything
+```
+
+Backups are written to `backups/` inside the data directory, and the newest
+five are kept. To restore one, stop Sieve and copy it over `sieve.db`:
+
+```bash
+cp ~/.local/share/sieve/backups/sieve-20260921-224703-123.db ~/.local/share/sieve/sieve.db
+```
 
 ## Uninstalling
 

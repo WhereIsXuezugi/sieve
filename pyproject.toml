@@ -1,6 +1,6 @@
 [project]
 name = "sieve"
-version = "0.1.0"
+version = "0.7.0"
 description = "A programmable recommendation layer for Invidious: source weights, per-video explanations, channel priority, and content scores you can read the arithmetic for."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,6 +36,9 @@ dependencies = [
 # TF-IDF vectors, or local NSFW frame scoring. Neither is required.
 embeddings = ["onnxruntime>=1.17", "tokenizers>=0.15"]
 vision = ["pillow>=10", "opennsfw2>=0.13"]
+# Fetch from YouTube directly with full detail: durations, whole playlists,
+# search and captions. Without it, YouTube's RSS feeds still work.
+youtube = ["yt-dlp>=2025.1.1"]
 dev = ["pytest>=8", "ruff>=0.3"]
 
 [project.urls]

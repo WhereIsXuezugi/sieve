@@ -77,7 +77,7 @@ def test_roundtrip_through_the_database_row():
     card = scoring.score_video(video(title="Forging a chisel from a leaf spring"),
                                "i heated the steel to orange and drew it out on the anvil")
     row = scoring.card_to_row(card)
-    columns = ["video_id", "version", "education", "entertainment", "stimulation", "brainrot", "clickbait", "info_density", "technical_depth", "production", "ai_generated", "nsfw", "music", "profanity", "topics", "vector", "signals", "computed_at"]
+    columns = ["video_id", "version", "education", "entertainment", "stimulation", "brainrot", "clickbait", "info_density", "technical_depth", "production", "ai_generated", "nsfw", "music", "profanity", "topics", "vector", "signals", "computed_at", "base"]
     assert len(columns) == len(row), "column list and row tuple must stay in step"
     restored = scoring.row_to_card(dict(zip(columns, row, strict=True)))
     assert restored.scores == card.scores

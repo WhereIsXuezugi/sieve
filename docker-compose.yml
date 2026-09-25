@@ -1,16 +1,32 @@
+# Sieve on its own: videos come from YouTube directly, no Invidious needed.
+#
+#   docker compose up -d
+#   open http://127.0.0.1:8377
+#
+# Already run Invidious? Uncomment SIEVE_INSTANCES below and point it at your
+# instance. The default "Automatic" backend then uses Invidious while it
+# answers and YouTube when it does not; change it under Controls, Getting videos.
+
 services:
   sieve:
     build: .
+    image: sieve:latest
+    container_name: sieve
     restart: unless-stopped
     ports:
+      # Loopback only. Sieve has no login: whoever can reach it is you.
       - "127.0.0.1:8377:8377"
     volumes:
       - sieve-data:/data
     environment:
-      # Point at your own Invidious instance.
-      SIEVE_INSTANCES: "http://invidious:3000"
-      SIEVE_WATCH_BASE: "http://127.0.0.1:3000/watch?v="
-      # Uncomment to use a local model for the brief compiler.
+      # Your time zone, so daily analytics roll over at your midnight.
+      TZ: "Etc/UTC"
+
+      # Your Invidious instance, if you have one. As a container name when it
+      # runs in the same compose project, e.g. http://invidious:3000.
+      # SIEVE_INSTANCES: "http://invidious:3000"
+
+      # Optional: a local model for the Brief page.
       # SIEVE_LLM_PROVIDER: "ollama"
       # SIEVE_LLM_BASE_URL: "http://ollama:11434"
 

@@ -126,6 +126,12 @@ def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
+def logit(p: float) -> float:
+    """The inverse of sigmoid, kept finite at 0 and 1."""
+    p = min(max(p, 1e-4), 1 - 1e-4)
+    return math.log(p / (1 - p))
+
+
 def sigmoid(x: float) -> float:
     if x < -30:
         return 0.0

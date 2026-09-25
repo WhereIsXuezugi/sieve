@@ -22,7 +22,13 @@ sieve [--config PATH] COMMAND
 | `sieve serve` | Run the web app. `--host`, `--port`, `--no-worker` |
 | `sieve doctor` | Diagnose an empty or wrong-looking homepage. `--quick` skips network checks |
 | `sieve stats` | Counts of everything in the database |
-| `sieve demo` | Fill the database with a synthetic catalogue. `--count N` |
+| `sieve demo` | Same as `sieve fetch` |
+| `sieve demo --synthetic` | Invented videos instead, for trying the controls with no network. `--count N` |
+| `sieve demo remove` | Delete the synthetic catalogue and what was learned from it |
+| `sieve pulls` | Requests made to YouTube or Invidious, and the pull limit. `reset` forgets them |
+| `sieve fetch` | Find videos for your topics. `--topics science,history`. Never runs by itself |
+| `sieve backup` | List backups. `create`, `delete NAME`, `restore NAME` (rolls back in place; `--yes` skips the prompt) |
+| `sieve --version` | The version, and where it is installed — the quickest way to spot an old install |
 
 `--no-worker` stops the background sync and scoring thread, for when you would
 rather drive those from cron.
@@ -31,9 +37,11 @@ rather drive those from cron.
 
 | Command | Does |
 |---|---|
-| `sieve sync` | Pull recent videos for your subscriptions and trending. `--deep` also searches your top interests |
+| `sieve sync` | Refresh what you have: subscriptions, playlists, followed channels, searches. `--deep` searches at least eight terms |
 | `sieve score` | Score anything unscored. `--limit N`, `--no-transcripts`, `--all` to rescore everything |
 | `sieve prune` | Drop stale rows and vacuum |
+| `sieve reset catalogue` | Delete every video and score, keeping your data. Backs up first; `--no-backup` to skip |
+| `sieve reset everything` | Factory reset. Asks you to type `reset`; `--yes` skips that for scripts |
 
 `sieve score --all` is required after changing `embed_provider`, since stored
 vectors from one backend mean nothing to another.

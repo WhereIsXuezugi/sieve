@@ -33,6 +33,9 @@ Given those, the things actually in scope are:
 | Upstream API responses | Parsed defensively; a malformed segment or branding entry is skipped, not trusted |
 | SQL | Parameterised throughout. Table names in migrations are literals, never user input |
 | Template output | Jinja autoescaping. Titles come from upstream and are never marked safe |
+| Custom player templates | Scheme whitelist: http, https and named desktop players. `javascript:`, `data:` and `file:` are refused, in the Controls form, the API, and imported profiles alike |
+| `/open/{id}` | Not an open redirect: the destination is built from your configured providers and a validated video id, never from the request |
+| Reset | Requires the typed word `reset` from every surface, API included, and backs up first |
 
 A profile from a stranger should not be able to make Sieve do anything the
 Controls page cannot. If you find a way around that, it is a real bug and worth

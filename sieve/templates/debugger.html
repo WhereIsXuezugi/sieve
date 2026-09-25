@@ -3,13 +3,13 @@
 
 {% block body %}
 <h1>Debugger</h1>
-<p class="lede">What the system currently believes about you, and what it did with that belief on the last render.</p>
+<p class="lede">What Sieve believes about you, and what it did with it on the last page load.</p>
 
 {% set d = diagnostics %}
 <div class="readout">
   <div><b>{{ d.pool }}</b><small>candidates considered</small></div>
-  <div><b>{{ d.shown }}</b><small>survived</small></div>
-  <div class="warn"><b>{{ d.rejected_total }}</b><small>rejected</small></div>
+  <div><b>{{ d.shown }}</b><small>on the page</small></div>
+  <div class="{{ 'warn' if d.rejected_total > d.shown * 4 else '' }}"><b>{{ d.rejected_total }}</b><small>filtered out</small></div>
   <div><b>{{ (d.diversity * 100) | round | int }}%</b><small>diversity index</small></div>
   <div><b>{{ d.model.samples }}</b><small>training samples</small></div>
 </div>
@@ -17,11 +17,11 @@
 <section class="panel" id="doctor">
   <h2>Health check</h2>
   {% if doctor.problems %}
-    {% for problem in doctor.problems %}<div class="notice bad">{{ problem }}</div>{% endfor %}
+    {% for problem in doctor.problems %}<div class="notice bad">{{ problem | sentence }}</div>{% endfor %}
   {% else %}
     <p class="hint">No configuration problems found.</p>
   {% endif %}
-  {% for note in doctor.notes %}<p class="hint">{{ note }}</p>{% endfor %}
+  {% for note in doctor.notes %}<p class="hint">{{ note | sentence }}</p>{% endfor %}
   <p class="wrap-actions">
     <button class="btn ghost" type="button" id="doctor-full">Check upstream services too</button>
   </p>
@@ -32,7 +32,7 @@
 
 <section class="panel">
   <h2>What it thinks you like</h2>
-  <p class="hint">Derived rows are recomputed from your watch history. Anything you edit here is pinned and will not be overwritten.</p>
+  <p class="hint">Learned rows update from your history. Rows you edit stay as you set them.</p>
 
   <form id="add-interest" class="wrap-actions" style="margin-bottom:.8rem">
     <input type="text" name="tag" placeholder="topic" style="max-width:14rem">
@@ -73,7 +73,7 @@
 
 <section class="panel">
   <h2>Why videos were hidden</h2>
-  <p class="hint">Usually the more useful question. Each row is a gate that fired on the last render.</p>
+  <p class="hint">What removed videos on the last page load.</p>
   <div class="scroll">
   <table>
     <thead><tr><th class="num">Count</th><th>Reason</th><th>For example</th></tr></thead>
@@ -97,7 +97,7 @@
   {% endif %}
 
   <h3>Blocked title terms</h3>
-  <p class="hint">Any video whose title contains one of these is dropped before ranking, case-insensitively.</p>
+  <p class="hint">Videos with these words in the title are hidden.</p>
   <form id="add-term" class="wrap-actions" style="margin-bottom:.5rem">
     <input type="text" name="term" placeholder="reaction" maxlength="80" style="max-width:14rem">
     <button class="btn ghost" type="submit">Block term</button>
@@ -136,7 +136,7 @@
 
 <section class="panel">
   <h2>The learned model</h2>
-  <p class="hint">A logistic regression over {{ d.model.samples }} events. Being linear, these coefficients <em>are</em> the explanation — there is no second model approximating the first.</p>
+  <p class="hint">What Sieve learned from your {{ d.model.samples }} more / less clicks. Positive means "show more like this".</p>
   {% if d.model.preferences %}
     {% for pref in d.model.preferences %}
       <div class="sparkrow">

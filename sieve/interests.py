@@ -39,6 +39,9 @@ def derive_from_history(db: Database, half_life_days: float = 30.0, limit: int =
         (limit,),
     )
     if not rows:
+        # No history left — perhaps you just deleted it. What was derived from
+        # it must go too; returning early here kept it forever.
+        db.execute("DELETE FROM interests WHERE origin = 'derived' AND pinned = 0")
         return 0
 
     import json
@@ -64,6 +67,7 @@ def derive_from_history(db: Database, half_life_days: float = 30.0, limit: int =
         total_weight += abs(weight)
 
     if total_weight <= 0:
+        db.execute("DELETE FROM interests WHERE origin = 'derived' AND pinned = 0")
         return 0
 
     peak = max(accumulator.values(), default=0.0)

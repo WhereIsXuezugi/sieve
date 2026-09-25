@@ -26,6 +26,8 @@ log = logging.getLogger("sieve.invidious")
 
 
 class Invidious:
+    name = "invidious"
+
     def __init__(self, cfg: Config, db: Database):
         self.cfg = cfg
         self.db = db
@@ -36,6 +38,14 @@ class Invidious:
             follow_redirects=True,
             headers={"User-Agent": "sieve/0.1 (+https://github.com/whereixuezugi/sieve)"},
         )
+        # Called with a kind ("channel", "search"…) right before a request
+        # leaves the machine; cache hits never call it. upstream.py points it
+        # at the pull budget, which may refuse by raising PullLimitReached.
+        self.on_request = None
+
+    def _spend(self, kind: str) -> None:
+        if self.on_request is not None:
+            self.on_request(kind)
 
     # -- plumbing ----------------------------------------------------------
 
@@ -72,14 +82,24 @@ class Invidious:
             if hit is not None:
                 return hit
 
+        self._spend(_kind_of(path))
         last_error: Exception | None = None
         for offset in range(len(self.instances)):
             index = (self._current + offset) % len(self.instances)
             base = self.instances[index].rstrip("/")
             try:
                 response = self._client.get(f"{base}{path}", params=params)
+                if response.status_code == 404 and _is_invidious_error(response):
+                    # An Invidious answering, in its own JSON, that this does
+                    # not exist. A 404 from anything else — a dev server that
+                    # happens to own port 3000 — says nothing about the
+                    # channel, only that no Invidious lives there.
+                    self._current = index
+                    raise NotFound(f"{path} does not exist")
                 response.raise_for_status()
                 data = response.json()
+            except NotFound:
+                raise
             except Exception as exc:
                 last_error = exc
                 log.warning("instance %s failed for %s: %s", base, path, exc)
@@ -89,6 +109,25 @@ class Invidious:
                 self._store(key, data, ttl)
             return data
         raise InvidiousUnavailable(f"no instance answered {path}: {last_error}")
+
+    def thumbnail_url(self, video_id: str) -> str:
+        # Through the instance, so the browser never talks to Google directly.
+        return f"{self.instances[self._current].rstrip('/')}/vi/{video_id}/mqdefault.jpg"
+
+    def reachable(self, timeout: float = 2.0) -> bool:
+        """A quick, uncached check that some instance answers — as an
+        Invidious. Anything else that answers on the port (a dev server, a
+        dashboard) is not one, and treating it as one sent every request to it."""
+        for base in self.instances:
+            try:
+                response = self._client.get(f"{base.rstrip('/')}/api/v1/stats", timeout=timeout)
+                response.raise_for_status()
+                body = response.json()
+                if isinstance(body, dict) and "software" in body:
+                    return True
+            except Exception:
+                continue
+        return False
 
     # -- endpoints ---------------------------------------------------------
 
@@ -118,6 +157,15 @@ class Invidious:
     def playlist(self, playlist_id: str) -> dict:
         return self.get(f"/api/v1/playlists/{playlist_id}")
 
+    def resolve_handle(self, handle: str) -> str:
+        """@name -> UC… channel id, through Invidious' resolveurl endpoint."""
+        data = self.get("/api/v1/resolveurl", {"url": f"https://www.youtube.com/@{handle}"},
+                        ttl=self.cfg.catalog_ttl)
+        channel = (data or {}).get("ucid") or ""
+        if not channel:
+            raise InvidiousUnavailable(f"Invidious could not resolve @{handle}")
+        return channel
+
     def captions(self, video_id: str, lang: str = "en") -> str:
         """Fetch a caption track as plain text.
 
@@ -132,6 +180,7 @@ class Invidious:
         hit = self._cached(key)
         if hit is not None:
             return hit
+        self._spend("captions")
         try:
             response = self._client.get(url, params={"label": lang, "lang": lang})
             response.raise_for_status()
@@ -143,8 +192,37 @@ class Invidious:
         return text
 
 
-class InvidiousUnavailable(RuntimeError):
+class UpstreamUnavailable(RuntimeError):
+    """No backend could answer. Raised by the YouTube client too, so callers
+    catch one type whichever backend they are talking to."""
+
+
+class InvidiousUnavailable(UpstreamUnavailable):
     pass
+
+
+class NotFound(UpstreamUnavailable):
+    """The backend answered, and the thing asked for does not exist: a deleted
+    channel, a private playlist. Unlike an outage, the next item may work."""
+
+
+def _is_invidious_error(response: httpx.Response) -> bool:
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and "error" in body
+
+
+def _kind_of(path: str) -> str:
+    """What an API path fetches, for the pull ledger."""
+    for marker, kind in (("/search", "search"), ("/playlists/", "playlist"),
+                         ("/channels/", "channel"), ("/videos/", "video"),
+                         ("/trending", "trending"), ("/popular", "popular"),
+                         ("/resolveurl", "resolve")):
+        if marker in path:
+            return kind
+    return "other"
 
 
 def _videos_of(data: Any) -> list[dict]:
@@ -199,4 +277,5 @@ def normalise_video(raw: dict) -> dict:
         "family_safe": int(bool(raw.get("isFamilyFriendly", True))),
         "sub_count": int(raw.get("subCountText_num") or raw.get("subCount") or 0),
         "caption_langs": [c.get("languageCode", "") for c in (raw.get("captions") or [])],
+        "is_short": int(bool(raw.get("isShort"))),
     }

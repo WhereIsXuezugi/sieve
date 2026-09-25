@@ -387,3 +387,90 @@ def _offline_critique(summary: dict) -> str:
 
 def timestamp() -> int:
     return int(time.time())
+
+
+# --------------------------------------------------------------------------
+# Connections configured in the app (Controls, AI), and a general call
+# --------------------------------------------------------------------------
+#
+# The config file's llm_* values still work; a provider chosen under
+# Controls, AI overrides them. The API key is kept apart from the settings
+# (settings key "ai_secret"), so it never appears in a profile export or an
+# API response. Adding a provider: add it to CONNECTIONS and to `complete`.
+
+CONNECTIONS = {
+    "none": {"label": "Off", "model": "", "base_url": ""},
+    "ollama": {"label": "Ollama (on your computer)", "model": "llama3.1", "base_url": "http://localhost:11434"},
+    "anthropic": {"label": "Claude (Anthropic)", "model": "claude-sonnet-4-5", "base_url": "https://api.anthropic.com"},
+    "openai": {"label": "OpenAI", "model": "gpt-4o-mini", "base_url": "https://api.openai.com/v1"},
+    "compatible": {"label": "Other (OpenAI-compatible API)", "model": "", "base_url": ""},
+}
+
+
+def effective(cfg: Config, db) -> Config:
+    """The config with the connection chosen in the app applied."""
+    import dataclasses
+
+    from .config import resolve_settings
+
+    ai = resolve_settings(db.get_setting("settings", {}) or {}).get("ai", {})
+    provider = ai.get("provider") or ""
+    if not provider or provider not in CONNECTIONS:
+        return cfg
+    if provider == "none":
+        return dataclasses.replace(cfg, llm_provider="none")
+    defaults = CONNECTIONS[provider]
+    key = (db.get_setting("ai_secret", {}) or {}).get("api_key", "") or cfg.llm_api_key
+    return dataclasses.replace(
+        cfg, llm_provider="openai" if provider == "compatible" else provider,
+        llm_model=ai.get("model") or defaults["model"] or cfg.llm_model,
+        llm_base_url=ai.get("base_url") or defaults["base_url"] or cfg.llm_base_url,
+        llm_api_key=key)
+
+
+def available(cfg: Config) -> bool:
+    return cfg.llm_provider not in ("", "none")
+
+
+def complete(cfg: Config, system: str, user: str, *, want_json: bool = True, max_tokens: int = 900) -> str:
+    """One request to the configured model. Raises LLMError on any failure."""
+    if not available(cfg):
+        raise LLMError("no AI connection is set up (Controls, AI)")
+    timeout = max(30.0, cfg.request_timeout * 4)
+    base = (cfg.llm_base_url or "").rstrip("/")
+    try:
+        if cfg.llm_provider == "ollama":
+            r = httpx.post(f"{base or 'http://localhost:11434'}/api/chat", timeout=timeout, json={
+                "model": cfg.llm_model, "stream": False, **({"format": "json"} if want_json else {}),
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+        if cfg.llm_provider == "anthropic":
+            r = httpx.post(f"{base or 'https://api.anthropic.com'}/v1/messages", timeout=timeout,
+                           headers={"x-api-key": cfg.llm_api_key, "anthropic-version": "2023-06-01"},
+                           json={"model": cfg.llm_model, "max_tokens": max_tokens, "system": system,
+                                 "messages": [{"role": "user", "content": user}]})
+            r.raise_for_status()
+            return "".join(part.get("text", "") for part in r.json().get("content", []))
+        if cfg.llm_provider == "openai":
+            r = httpx.post(f"{base or 'https://api.openai.com/v1'}/chat/completions", timeout=timeout,
+                           headers={"Authorization": f"Bearer {cfg.llm_api_key}"} if cfg.llm_api_key else {},
+                           json={"model": cfg.llm_model, "max_tokens": max_tokens,
+                                 **({"response_format": {"type": "json_object"}} if want_json else {}),
+                                 "messages": [{"role": "system", "content": system},
+                                              {"role": "user", "content": user}]})
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+    except httpx.HTTPStatusError as exc:
+        raise LLMError(f"{cfg.llm_provider} answered {exc.response.status_code}: "
+                       f"{exc.response.text[:200]}") from None
+    except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
+        raise LLMError(f"{cfg.llm_provider} failed: {exc}") from None
+    raise LLMError(f"unknown provider {cfg.llm_provider!r}")
+
+
+def complete_json(cfg: Config, system: str, user: str) -> dict:
+    parsed = _parse_json(complete(cfg, system, user))
+    if not isinstance(parsed, dict):
+        raise LLMError("the model did not answer with JSON")
+    return parsed

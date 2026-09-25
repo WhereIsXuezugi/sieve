@@ -24,23 +24,34 @@ from fastapi.testclient import TestClient
 
 from sieve.app import create_app
 from sieve.cli import seed_demo
-from sieve.config import Config
 from sieve.db import Database
+from tests.support import offline_config
 
 VIDEO = "demo0003"
+REAL = "dQw4w9WgXcQ"  # YouTube-shaped, so the provider controls render for it
 
 # (method, api path) -> (web page, marker proving the control is on that page)
 API_TO_WEB: dict[tuple[str, str], tuple[str, str]] = {
     ("GET", "/api/recommendations"): ("/", "data-video="),
     ("GET", "/api/videos/{video_id}"): (f"/video/{VIDEO}", "Content scores"),
     ("GET", "/api/sponsorblock/{video_id}"): (f"/video/{VIDEO}", "SponsorBlock"),
+    ("PUT", "/api/videos/{video_id}/scores"): (f"/video/{VIDEO}", "data-override="),
     ("GET", "/api/status"): ("/", " scored"),
     ("POST", "/api/feedback"): ("/", "data-feedback="),
     ("POST", "/api/hide"): ("/", "data-hide="),
-    ("POST", "/api/progress"): ("/", "data-watch="),
+    ("POST", "/api/progress"): (f"/video/{REAL}", f'href="/open/{REAL}?via='),
+    ("GET", "/api/videos/{video_id}/links"): (f"/video/{REAL}", "Watch on "),
+    ("GET", "/api/providers"): ("/settings", 'id="playback"'),
+    ("POST", "/api/reset"): ("/settings", 'data-reset="everything"'),
+    ("POST", "/api/sift"): ("/sift", 'action="/sift"'),
+    ("GET", "/api/funnel"): ("/funnel", 'class="funnel-table"'),
+    ("GET", "/api/records/{kind}"): ("/history", 'role="tablist"'),
+    ("DELETE", "/api/records/{kind}/{record}"): ("/history", "data-record-delete"),
+    ("POST", "/api/records/{kind}/forget"): ("/history", "data-forget"),
+    ("GET", "/api/backups"): ("/settings", 'id="danger"'),
 
-    ("GET", "/api/settings"): ("/settings", 'action="/settings"'),
-    ("POST", "/api/settings"): ("/settings", 'action="/settings"'),
+    ("GET", "/api/settings"): ("/settings", "data-autosave"),
+    ("POST", "/api/settings"): ("/settings", "data-autosave"),
     ("POST", "/api/settings/reset"): ("/settings", 'action="/settings/reset"'),
     ("GET", "/api/moods"): ("/settings", 'id="moods"'),
     ("POST", "/api/moods/active"): ("/", 'action="/settings/mood"'),
@@ -70,7 +81,7 @@ API_TO_WEB: dict[tuple[str, str], tuple[str, str]] = {
     ("POST", "/api/brief/compile"): ("/brief", 'action="/brief"'),
     ("POST", "/api/brief/apply"): ("/brief", 'action="/brief"'),
     ("GET", "/api/rules"): ("/rules", 'id="rule-json"'),
-    ("POST", "/api/rules"): ("/rules", 'id="rule-save"'),
+    ("POST", "/api/rules"): ("/rules", "data-rule-autosave"),
     ("POST", "/api/rules/validate"): ("/rules", 'id="rule-status"'),
     ("GET", "/api/analytics"): ("/analytics", "Completion by length"),
 
@@ -89,17 +100,62 @@ API_TO_WEB: dict[tuple[str, str], tuple[str, str]] = {
     ("POST", "/api/profile/fetch"): ("/settings", 'id="profile-fetch"'),
 
     ("POST", "/api/sync"): ("/settings", 'data-action="/api/sync"'),
-    ("POST", "/api/score"): ("/settings", 'data-action="/api/score"'),
+    # Re-check all videos rescores everything, among other things.
+    ("POST", "/api/score"): ("/settings", 'data-action="/api/reevaluate"'),
+    ("POST", "/api/reevaluate"): ("/settings", 'data-action="/api/reevaluate"'),
     ("POST", "/api/maintenance/prune"): ("/settings", 'data-action="/api/maintenance/prune"'),
     ("POST", "/api/vision/scan"): ("/settings", 'data-action="/api/vision/scan"'),
+    ("GET", "/api/pulls"): ("/settings", 'id="pull-usage"'),
+    ("POST", "/api/fetch"): ("/", 'data-action="/api/fetch"'),
+    ("GET", "/api/fetch/progress"): ("/", "data-progress"),
+    ("POST", "/api/ai/tune"): ("/settings", 'data-action="/api/ai/tune"'),
+    ("POST", "/api/ai/tune/undo"): ("/settings", 'data-action="/api/ai/tune/undo"'),
+    ("POST", "/api/notices/{key}/dismiss"): ("/", 'class="dismiss"'),
+    ("GET", "/api/problems"): ("/", 'data-progress'),
+    ("POST", "/api/homepage/search"): ("/", 'data-home-search'),
+    ("POST", "/api/videos/{video_id}/explain"): (f"/video/{VIDEO}", 'data-explain='),
+    ("GET", "/api/scales/{key}/range"): ("/settings", 'data-help="clickbait"'),
+    ("GET", "/api/ai"): ("/settings", 'id="ai"'),
+    ("POST", "/api/ai/key"): ("/settings", 'data-ai-key'),
+    ("DELETE", "/api/ai/key"): ("/settings", 'id="ai"'),
+    ("POST", "/api/ai/test"): ("/settings", 'data-action="/api/ai/test"'),
+    ("GET", "/api/library/search"): ("/library", 'id="search"'),
+    ("GET", "/api/videos/{video_id}/notes"): (f"/video/{REAL}", 'id="notes"'),
+    ("POST", "/api/videos/{video_id}/notes"): (f"/video/{REAL}", "data-note-form="),
+    ("DELETE", "/api/notes/{note_id}"): (f"/video/{REAL}", 'id="notes"'),
+    ("GET", "/api/export/notes"): ("/library", 'action="/api/export/notes"'),
+    ("POST", "/api/downloads"): ("/library", 'id="downloads"'),
+    ("GET", "/api/downloads"): ("/library", "data-downloads"),
+    ("DELETE", "/api/downloads/{video_id}"): ("/library", 'id="downloads"'),
+    ("POST", "/api/channels/{channel_id}/alert"): (f"/video/{REAL}", '/alert"'),
+    ("GET", "/api/alerts"): ("/library", 'id="alerts"'),
+    ("POST", "/api/alerts/seen"): ("/library", 'id="alerts"'),
+    ("GET", "/api/digest"): ("/library", 'data-action="/api/digest"'),
+    ("POST", "/api/digest"): ("/library", 'data-action="/api/digest"'),
+    ("POST", "/api/notify/test"): ("/settings", 'data-action="/api/notify/test"'),
+    ("POST", "/api/source/cookies"): ("/settings", 'data-upload="/api/source/cookies"'),
+    ("DELETE", "/api/source/cookies"): ("/settings", 'id="youtube-sign-in"'),
+    ("GET", "/api/scales/{key}"): ("/settings", 'data-help="clickbait"'),
+    ("POST", "/api/pulls/reset"): ("/settings", 'data-action="/api/pulls/reset"'),
+    ("POST", "/api/catalogue/reset-pulled"): ("/settings", 'data-action="/api/catalogue/reset-pulled"'),
+    ("POST", "/api/backups"): ("/settings", 'data-action="/api/backups"'),
+    # Rows (and their buttons) appear once a backup exists; the panel always does.
+    ("DELETE", "/api/backups/{name}"): ("/settings", 'id="backups"'),
+    ("POST", "/api/backups/{name}/restore"): ("/settings", 'id="backups"'),
+    ("POST", "/api/catalogue/remove-demo"): ("/settings", 'data-action="/api/catalogue/remove-demo"'),
 }
 
 # (method, web path) -> (method, api path) that does the same thing
 WEB_TO_API: dict[tuple[str, str], tuple[str, str]] = {
     ("GET", "/"): ("GET", "/api/recommendations"),
     ("GET", "/video/{video_id}"): ("GET", "/api/videos/{video_id}"),
+    ("GET", "/open/{video_id}"): ("GET", "/api/videos/{video_id}/links"),
+    ("GET", "/play/{video_id}"): ("GET", "/api/videos/{video_id}"),
+    ("GET", "/library"): ("GET", "/api/library/search"),
+    ("GET", "/sift"): ("POST", "/api/sift"),
+    ("GET", "/funnel"): ("GET", "/api/funnel"),
+    ("GET", "/history"): ("GET", "/api/records/{kind}"),
     ("GET", "/settings"): ("GET", "/api/settings"),
-    ("POST", "/settings"): ("POST", "/api/settings"),
     ("POST", "/settings/reset"): ("POST", "/api/settings/reset"),
     ("POST", "/settings/mood"): ("POST", "/api/moods/active"),
     ("POST", "/settings/mood/save"): ("PUT", "/api/moods/{name}"),
@@ -116,8 +172,13 @@ WEB_TO_API: dict[tuple[str, str], tuple[str, str]] = {
 
 # Routes that are legitimately on one surface only, with the reason.
 ONE_SIDED: dict[tuple[str, str], str] = {
+    ("GET", "/feeds/{name}.xml"): "RSS for feed readers: the same data as /api/alerts and /api/digest",
+    ("GET", "/media/{video_id}"): "a downloaded video file, streamed to the player",
+    ("GET", "/userscript/sieve.user.js"): "a file for a browser extension to install, not a feature",
     ("GET", "/demo/thumb/{video_id}.svg"):
         "an image asset for the demo catalogue, not a feature",
+    ("GET", "/thumb/{video_id}"):
+        "an image asset: redirects each thumbnail to Invidious or YouTube, whichever is live",
 }
 
 # How to call each API route in a way that must not produce a server error.
@@ -186,13 +247,72 @@ CALLS: dict[tuple[str, str], tuple[str, dict, set[int]]] = {
     ("POST", "/api/score"): ("/api/score", {"json": {"limit": 5, "transcripts": False}}, {200}),
     ("POST", "/api/maintenance/prune"): ("/api/maintenance/prune", {}, {200}),
     ("POST", "/api/vision/scan"): ("/api/vision/scan", {}, {200}),
+    ("GET", "/api/pulls"): ("/api/pulls", {}, {200}),
+    # Nothing answers in the test config: a fetch that stops early is still a 200.
+    ("POST", "/api/fetch"): ("/api/fetch", {}, {200}),
+    ("POST", "/api/pulls/reset"): ("/api/pulls/reset", {}, {200}),
+    ("POST", "/api/reevaluate"): ("/api/reevaluate", {}, {200}),
+    ("GET", "/api/fetch/progress"): ("/api/fetch/progress", {}, {200}),
+    ("POST", "/api/ai/tune"): ("/api/ai/tune", {}, {502}),
+    ("POST", "/api/ai/tune/undo"): ("/api/ai/tune/undo", {}, {200}),
+    ("POST", "/api/notices/{key}/dismiss"): ("/api/notices/playback/dismiss", {}, {200}),
+    ("GET", "/api/problems"): ("/api/problems", {}, {200}),
+    ("POST", "/api/homepage/search"): ("/api/homepage/search", {'json': {'q': 'kernel', 'ids': ['demo0003']}}, {200}),
+    ("POST", "/api/videos/{video_id}/explain"): (f"/api/videos/{VIDEO}/explain", {'json': {'text': 'too long and rambling'}}, {200}),
+    ("GET", "/api/scales/{key}/range"): ("/api/scales/clickbait/range?at=30", {}, {200}),
+    ("GET", "/api/ai"): ("/api/ai", {}, {200}),
+    ("POST", "/api/ai/key"): ("/api/ai/key", {'json': {'api_key': 'sk-test'}}, {200}),
+    ("DELETE", "/api/ai/key"): ("/api/ai/key", {}, {200}),
+    ("POST", "/api/ai/test"): ("/api/ai/test", {}, {502}),
+    ("GET", "/api/library/search"): ("/api/library/search?q=kernel", {}, {200}),
+    ("GET", "/api/videos/{video_id}/notes"): (f"/api/videos/{REAL}/notes", {}, {200}),
+    ("POST", "/api/videos/{video_id}/notes"): (f"/api/videos/{REAL}/notes",
+                                               {"json": {"text": "a note", "at_second": 12}}, {200}),
+    ("DELETE", "/api/notes/{note_id}"): ("/api/notes/999999", {}, {404}),
+    ("GET", "/api/export/notes"): ("/api/export/notes?format=obsidian", {}, {200}),
+    ("POST", "/api/downloads"): ("/api/downloads", {"json": {"video_id": REAL, "quality": "480"}}, {200}),
+    ("GET", "/api/downloads"): ("/api/downloads", {}, {200}),
+    ("DELETE", "/api/downloads/{video_id}"): (f"/api/downloads/{REAL}", {}, {200}),
+    ("POST", "/api/channels/{channel_id}/alert"): ("/api/channels/UCparity/alert", {"json": {"on": True}}, {200}),
+    ("GET", "/api/alerts"): ("/api/alerts", {}, {200}),
+    ("POST", "/api/alerts/seen"): ("/api/alerts/seen", {}, {200}),
+    ("GET", "/api/digest"): ("/api/digest", {}, {200}),
+    ("POST", "/api/digest"): ("/api/digest", {}, {200}),
+    ("POST", "/api/notify/test"): ("/api/notify/test", {}, {400}),
+    ("POST", "/api/source/cookies"): ("/api/source/cookies",
+                                      {"files": {"file": ("c.txt", b"not cookies")}}, {400}),
+    ("DELETE", "/api/source/cookies"): ("/api/source/cookies", {}, {200}),
+    ("GET", "/api/scales/{key}"): ("/api/scales/clickbait?value=30", {}, {200}),
+    ("PUT", "/api/videos/{video_id}/scores"): (f"/api/videos/{VIDEO}/scores",
+                                               {"json": {"education": 70}}, {200}),
+    ("POST", "/api/backups"): ("/api/backups", {}, {200}),
+    ("DELETE", "/api/backups/{name}"): ("/api/backups/sieve-manual-20260101-000000-000.db", {}, {404}),
+    ("POST", "/api/backups/{name}/restore"): ("/api/backups/sieve-manual-20260101-000000-000.db/restore",
+                                              {"json": {"confirm": "restore"}}, {404}),
+    ("GET", "/api/videos/{video_id}/links"): (f"/api/videos/{REAL}/links", {}, {200}),
+    ("GET", "/api/providers"): ("/api/providers", {}, {200}),
+    ("GET", "/api/backups"): ("/api/backups", {}, {200}),
+    # Every backend is a closed port here, so a search reaches nothing: 502, or
+    # 400 when the YouTube client answers "no results" without yt-dlp.
+    ("POST", "/api/sift"): ("/api/sift", {"json": {"query": "compilers"}}, {400, 502}),
+    ("GET", "/api/funnel"): ("/api/funnel?limit=50", {}, {200}),
+    ("GET", "/api/records/{kind}"): ("/api/records/watches?limit=5", {}, {200}),
+    ("DELETE", "/api/records/{kind}/{record}"): ("/api/records/watches/1", {}, {200}),
+    ("POST", "/api/records/{kind}/forget"): ("/api/records/opens/forget", {"json": {"confirm": "forget"}}, {200}),
+    ("POST", "/api/catalogue/reset-pulled"): ("/api/catalogue/reset-pulled", {"json": {"confirm": "reset"}}, {200}),
+    # Near the end: it deletes the demo videos the calls above use.
+    ("POST", "/api/catalogue/remove-demo"): ("/api/catalogue/remove-demo", {}, {200}),
+    # Last: it empties the database every call above relies on.
+    ("POST", "/api/reset"): ("/api/reset", {"json": {"scope": "everything", "confirm": "reset"}}, {200}),
 }
 
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
     data = tmp_path_factory.mktemp("parity")
-    cfg = Config(data_dir=str(data), instances=["http://127.0.0.1:9"], request_timeout=1)
+    # Every upstream points at a closed local port. SponsorBlock is enabled
+    # below, and before this line it quietly contacted sponsor.ajay.app.
+    cfg = offline_config(data)
     db = Database(cfg.db_path)
     seed_demo(db, 120)
     # Seed the things some controls only render when they exist.
@@ -208,7 +328,21 @@ def client(tmp_path_factory):
                ("seeded", json.dumps({"settings": {}}), "", now))
     db.execute("INSERT INTO channel_prefs(channel_id, name, priority, listing, updated_at) "
                "VALUES('UC_forge','Backyard Forge',2,'neutral',?)", (now,))
-    db.set_setting("settings", {"sponsorblock": {"enabled": True}})
+    db.set_setting("settings", {"sponsorblock": {"enabled": True}, "homepage": {"count": 200}})
+    # One video with a real YouTube-shaped id, so the controls that only
+    # appear for playable videos (the "open in" menu) are on the page.
+    db.upsert_videos([{
+        "id": REAL, "title": "A real-shaped video", "author": "Real Shape",
+        # Its own channel, so the per-channel cap cannot arrange it off the page.
+        "author_id": "UC_realshape", "published": now, "duration": 900, "views": 50000,
+        "likes": 900, "description": "", "keywords": [], "genre": "Science & Technology",
+        "is_live": 0, "is_upcoming": 0, "family_safe": 1, "sub_count": 84000,
+    }])
+    db.execute("INSERT INTO subscriptions(channel_id, name, weight, added_at) "
+               "VALUES('UC_realshape', 'Real Shape', 1.0, ?)", (now,))
+    from sieve import scoring
+    video = db.get_video(REAL)
+    db.executemany(scoring.INSERT_SCORE, [scoring.card_to_row(scoring.score_video(dict(video)))])
     app = create_app(cfg, start_worker=False)
     return TestClient(app)
 
@@ -270,6 +404,15 @@ def test_web_control_is_on_the_page(client, route):
     assert marker in response.text, (
         f"{route[0]} {route[1]} is declared as reachable from {page}, "
         f"but {marker!r} is not on that page")
+
+
+# Runs before the API calls below: their last call is a factory reset.
+def test_homepage_cards_offer_the_open_in_menu(client):
+    """Every playable card carries the menu; demo cards say they are demos."""
+    html = client.get("/").text
+    assert f'href="/open/{REAL}' in html, "the real-shaped video should link through /open"
+    assert 'class="openwith"' in html
+    assert ">demo</span>" in html, "demo cards should be labelled, not linked to a provider"
 
 
 @pytest.mark.parametrize("route", list(CALLS), ids=lambda r: f"{r[0]} {r[1]}")

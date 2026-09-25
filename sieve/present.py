@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import ranking
+from . import providers, ranking
 from .config import Config
 
 
@@ -22,7 +22,10 @@ def display_title(candidate: ranking.Candidate, settings: dict) -> dict[str, str
             "original": video.get("original_title", "") if da.get("show_original") else "",
             "source": "DeArrow",
         }
-    return {"text": video["title"], "original": "", "source": ""}
+    # A search result or a failed lookup can leave the title empty; the card
+    # must still say something (the worker fills it in later, see backfill).
+    return {"text": (video.get("title") or "").strip() or "Untitled video (details not loaded yet)",
+            "original": "", "source": ""}
 
 
 def thumb_url(cfg: Config, candidate: ranking.Candidate, settings: dict) -> str:
@@ -34,9 +37,11 @@ def thumb_url(cfg: Config, candidate: ranking.Candidate, settings: dict) -> str:
         base = cfg.dearrow_thumbnail_url.rstrip("/")
         if thumb_time is not None:
             return f"{base}/api/v1/getThumbnail?videoID={video_id}&time={thumb_time}"
-    if video_id.startswith("demo"):
+    if not providers.playable(video_id):
+        # Not a real YouTube id, so no thumbnail exists anywhere: draw one.
         return f"/demo/thumb/{video_id}.svg"
-    return f"{cfg.instances[0].rstrip('/')}/vi/{video_id}/mqdefault.jpg"
+    # Sieve decides the host at request time: see the /thumb route.
+    return f"/thumb/{video_id}"
 
 
 def candidate_json(cfg: Config, candidate: ranking.Candidate, settings: dict,
@@ -56,7 +61,12 @@ def candidate_json(cfg: Config, candidate: ranking.Candidate, settings: dict,
         "views": int(video.get("views") or 0),
         "published": int(video.get("published") or 0),
         "thumbnail": thumb_url(cfg, candidate, settings),
-        "watch_url": f"{cfg.watch_base}{candidate.id}",
+        "playable": providers.playable(candidate.id),
+        "open_url": f"/open/{candidate.id}" if providers.playable(candidate.id) else None,
+        "links": providers.links(
+            candidate.id, settings, cfg,
+            providers.resume_at(candidate.progress, int(video.get("duration") or 0))
+            if settings["playback"].get("resume", True) else None),
         "bucket": candidate.bucket,
         "progress": round(candidate.progress, 4),
         "score": round(candidate.score, 4),

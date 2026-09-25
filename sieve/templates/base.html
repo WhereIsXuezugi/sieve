@@ -11,26 +11,64 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 {% endif %}
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#3f3aa8">
 </head>
 <body>
 
 <header class="masthead">
   <a class="wordmark" href="/">sieve <span>/ {{ settings.active_mood or "no mood" }}</span></a>
   <nav>
-    {% for item in nav %}
+    {% for item in nav if not item.more %}
       <a href="{{ item.href }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
     {% endfor %}
+    {% set more_active = nav | selectattr('more') | selectattr('active') | list %}
+    <details class="nav-more">
+      <summary {% if more_active %}aria-current="page"{% endif %}>{{ more_active[0].label if more_active else 'More' }}</summary>
+      <div class="nav-menu">
+        {% for item in nav if item.more %}
+          <a href="{{ item.href }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+        {% endfor %}
+      </div>
+    </details>
   </nav>
   <span class="spacer"></span>
-  <span class="muted mono" style="font-size:.75rem">
-    {{ stats.videos }} videos · {{ stats.scored }} scored
+  <span class="global-actions">
+    <button class="btn" type="button" data-action="/api/fetch" data-toast data-reload
+            title="Find videos for your topics (Controls, Finding videos)">Fetch</button>
+    <button class="btn ghost" type="button" data-action="/api/sync" data-toast data-reload
+            title="Refresh your subscriptions, playlists and the channels Sieve follows">Sync</button>
+  </span>
+  <span class="muted mono masthead-stats">
+    {{ stats.videos }} video{{ '' if stats.videos == 1 else 's' }} · {{ stats.scored }} scored
   </span>
 </header>
 
+<div class="progress" id="progress" data-progress hidden role="progressbar" aria-live="polite">
+  <div class="progress-track"><i></i></div>
+  <span class="progress-label"></span>
+</div>
+
 <main>
+{% for pr in problems %}
+  <div class="notice bad problem" data-dismiss="problem-{{ pr.kind }}-{{ pr.at }}">
+    <div>
+      <b>{{ pr.title }}</b> <span class="muted">({{ pr.at | ago }}{% if pr.count > 1 %}, {{ pr.count }} times{% endif %})</span>
+      <p>{{ pr.text }}</p>
+      <details>
+        <summary>Technical details</summary>
+        <pre class="mono">{{ pr.detail }}</pre>
+        {% if pr.links %}<p>{% for label, url in pr.links %}<a href="{{ url }}" target="_blank" rel="noopener">{{ label }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+      </details>
+      {% if pr.fix %}<p><a class="btn ghost" href="{{ pr.fix }}">Fix it</a></p>{% endif %}
+    </div>
+    <button class="dismiss" type="button" aria-label="Dismiss">×</button>
+  </div>
+{% endfor %}
 {% block body %}{% endblock %}
 </main>
 
 <script src="/static/app.js"></script>
+<script src="/static/autosave.js"></script>
 </body>
 </html>

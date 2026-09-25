@@ -70,10 +70,13 @@ def dashboard(db: Database, days: int = 30) -> dict[str, Any]:
     impressions = db.scalar(
         "SELECT COUNT(*) FROM impressions WHERE shown_at >= ?", (since,), default=0
     )
+    # Click-through is what you opened out of what you were shown. Opens are
+    # the direct record of that; history only exists when a player reports.
     clicked = db.scalar(
         "SELECT COUNT(DISTINCT i.video_id) FROM impressions i "
-        "JOIN history h ON h.video_id = i.video_id AND h.watched_at >= i.shown_at "
-        "WHERE i.shown_at >= ?",
+        "WHERE i.shown_at >= ? AND ("
+        "  EXISTS (SELECT 1 FROM opens o WHERE o.video_id = i.video_id AND o.opened_at >= i.shown_at)"
+        "  OR EXISTS (SELECT 1 FROM history h WHERE h.video_id = i.video_id AND h.watched_at >= i.shown_at))",
         (since,), default=0,
     )
 
@@ -166,6 +169,7 @@ def blind_spots(db: Database, limit: int = 12) -> list[dict]:
         SELECT i.video_id, COUNT(*) AS shows, v.title, v.author
         FROM impressions i JOIN videos v ON v.id = i.video_id
         WHERE i.video_id NOT IN (SELECT video_id FROM history)
+          AND i.video_id NOT IN (SELECT video_id FROM opens)
         GROUP BY i.video_id HAVING shows >= 3 ORDER BY shows DESC LIMIT ?
         """,
         (limit,),

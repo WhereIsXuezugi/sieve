@@ -96,6 +96,10 @@ class CommunityData:
                 payload = response.json()
             except Exception as exc:
                 log.warning("sponsorblock prefix %s failed: %s", prefix, exc)
+                from . import problems
+
+                problems.record(self.db, problems.classify_community("sponsorblock", str(exc)),
+                                f"sponsorblock prefix {prefix} failed: {exc}")
                 continue
             rows = []
             for entry in payload if isinstance(payload, list) else []:
@@ -162,6 +166,10 @@ class CommunityData:
                 payload = response.json()
             except Exception as exc:
                 log.warning("dearrow prefix %s failed: %s", prefix, exc)
+                from . import problems
+
+                problems.record(self.db, problems.classify_community("dearrow", str(exc)),
+                                f"dearrow prefix {prefix} failed: {exc}")
                 continue
             rows = []
             for vid, entry in (payload or {}).items():

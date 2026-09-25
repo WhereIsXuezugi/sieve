@@ -1,5 +1,12 @@
 # Wiring the player to Sieve
 
+> [!TIP]
+> You may not need this page. **Sieve's own player** — Controls, Playback,
+> "Sieve player" — does all of it already: it records real watch progress,
+> skips SponsorBlock segments and resumes where you left off, with no change
+> to Invidious. What follows is for people who would rather keep watching in
+> Invidious' own player.
+
 Sieve does not host the player. Invidious does, and that is the right split —
 but it means two things need a small bridge.
 
@@ -10,8 +17,11 @@ Completion is the single most useful signal Sieve has. "Watched 100%" and
 without them the learner is working from clicks alone, which is how every feed
 you dislike was trained.
 
-Opening a video from Sieve records a 2% watch so the click is not lost. To get
-real numbers, have the player page report progress:
+Opening a video from Sieve records that you *opened* it — nothing more, because
+an open says nothing about how much you watched. (Earlier versions recorded it
+as a 2% watch, which the learner read as a bounce; those rows are migrated to
+opens automatically.) To give Sieve real completion figures, have the player
+page report progress:
 
 ```js
 // Add to your Invidious instance, e.g. in a user script or a template override.

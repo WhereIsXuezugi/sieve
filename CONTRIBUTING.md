@@ -77,7 +77,10 @@ change. A few kinds are especially welcome:
   the hash prefix it was asked about, because a stub that returns everything
   hides batching bugs.
 
-External services are never contacted from tests.
+External services are never contacted from tests, and `tests/conftest.py`
+enforces it: any request to a host other than this machine fails the test that
+made it, even when Sieve's own error handling swallows the failure. Point a
+test's `Config` at `http://127.0.0.1:9` to simulate an unreachable service.
 
 ## Style
 

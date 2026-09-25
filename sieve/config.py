@@ -32,8 +32,11 @@ class Config:
 
     # Invidious instances, tried in order. The first one that answers wins and
     # stays sticky until it fails. Point this at your own instance.
+    # Your own instance only. There used to be a public instance here as a
+    # fallback, which sent your whole subscription list to a third party
+    # nobody chose; YouTube itself is the fallback now (upstream.py).
     instances: list[str] = field(
-        default_factory=lambda: ["http://127.0.0.1:3000", "https://yewtu.be"]
+        default_factory=lambda: ["http://127.0.0.1:3000"]
     )
     request_timeout: float = 8.0
     cache_ttl: int = 3600          # seconds, for Invidious API responses
@@ -66,6 +69,12 @@ class Config:
     dearrow_url: str = "https://sponsor.ajay.app"
     dearrow_thumbnail_url: str = "https://dearrow-thumb.ajay.app"
     community_ttl: int = 3 * 86400
+
+    # YouTube, for the youtube and auto backends (upstream.py). The address is
+    # configurable for tests and for anyone routing YouTube through a proxy;
+    # use_ytdlp turns yt-dlp off even when it is installed.
+    youtube_url: str = "https://www.youtube.com"
+    use_ytdlp: bool = True
 
     # Offline hosting: skip the Google Fonts link and use system faces.
     webfonts: bool = True
@@ -193,6 +202,51 @@ SCORE_KEYS = [
     "profanity",
 ]
 
+# How much work Sieve does. Each value is a real cost:
+#   pool_size       candidates ranked per page render (CPU per render)
+#   mmr_window      recent picks each candidate is compared with for variety
+#   score_batch     videos scored per background pass
+#   transcripts     fetch caption tracks to score (one request per video)
+#   sync_minutes    how often the catalogue refreshes (requests per hour)
+#   discover_terms  interest searches per sync, pulling in videos you do not follow
+#   sift_limit      videos fetched per Sift
+COMPUTE_PRESETS: dict[str, dict[str, Any]] = {
+    "light": {"pool_size": 200, "mmr_window": 6, "score_batch": 8, "transcripts": False,
+              "sync_minutes": 60, "discover_terms": 0, "sift_limit": 20},
+    "balanced": {"pool_size": 600, "mmr_window": 12, "score_batch": 24, "transcripts": True,
+                 "sync_minutes": 15, "discover_terms": 4, "sift_limit": 40},
+    "thorough": {"pool_size": 1500, "mmr_window": 30, "score_batch": 60, "transcripts": True,
+                 "sync_minutes": 5, "discover_terms": 10, "sift_limit": 100},
+}
+COMPUTE_LIMITS: dict[str, tuple[int, int]] = {
+    "pool_size": (50, 5000), "mmr_window": (1, 100), "score_batch": (1, 500),
+    # Up to 30 days: someone on a metered link may want one sync a month.
+    # 0 = never: sync only when you press Sync.
+    "sync_minutes": (0, 43200), "discover_terms": (0, 30), "sift_limit": (5, 300),
+}
+
+# The homepage holds 1 to 100 videos.
+HOMEPAGE_COUNT = (1, 100)
+
+# What happens when the ranking finds fewer videos than the page holds.
+#   off        show what there is
+#   catalogue  top up from the rest of the catalogue, with every filter kept
+#   relaxed    as catalogue, then go past the per-channel cap and relax the
+#              soft filters (never the hard ones: blocked channels, hidden
+#              videos, blocked terms, what you watched, and the nudity limit)
+FILL_MODES = ("off", "catalogue", "relaxed")
+
+# Pull limit windows, in minutes: fifteen minutes to thirty days.
+PULL_WINDOWS: list[tuple[int, str]] = [
+    (15, "15 minutes"), (30, "30 minutes"), (60, "hour"), (180, "3 hours"),
+    (360, "6 hours"), (720, "12 hours"), (1440, "day"), (4320, "3 days"),
+    (10080, "week"), (20160, "2 weeks"), (43200, "30 days"),
+]
+PULL_LIMITS: dict[str, tuple[int, int]] = {
+    "limit_count": (1, 100000), "limit_window": (15, 43200),
+    "follow_channels": (0, 100), "per_pull": (5, 50),
+}
+
 SOURCE_KEYS = ["subscriptions", "history", "playlists", "discovery", "interests", "niche"]
 
 BUCKETS = ["education", "entertainment", "hobby", "meme", "music", "other"]
@@ -208,8 +262,22 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "show_explanations": True,
         "show_scores": True,
         "continue_first": True,
-        "shuffle": False,              # ignore ranking, draw uniformly at random
         "refresh_seed": "daily",       # daily | session | fixed
+        # Never leave the page short or empty: see FILL_MODES. The default
+        # keeps every filter; "relaxed" is the choice to fill no matter what.
+        "fill": "catalogue",
+        # The next episode of a series you are watching goes near the top.
+        "next_episode": True,
+        # Minutes between new videos appearing on the homepage; 0 = any time.
+        # Between refreshes it only draws from what it already showed.
+        "new_every": 0,
+        # Newly fetched videos get a temporary lift that halves every
+        # recent_half_life hours; it is never written into their scores.
+        "recent_boost": True,
+        "recent_strength": 1.0,
+        "recent_half_life": 24,
+        # Searching the homepage: "ai" (falls back to "math") or "math".
+        "search_mode": "ai",
     },
     # ---- where candidates come from, as relative weights -----------------
     "sources": {
@@ -264,6 +332,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "hide_upcoming": True,
         "hide_watched": True,
         "languages": [],               # empty = any
+        # Languages you want videos in; "prefer" ranks others lower, "only"
+        # hides them. A video whose language cannot be told is never hidden.
+        "video_languages": [],
+        "video_language_mode": "prefer",
     },
     # ---- channel policy --------------------------------------------------
     # Manual priority lives in the channel_prefs table (-5..+5). These knobs
@@ -298,6 +370,71 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "score_penalty": 0.0,          # how much sponsor load lowers the rank
     },
     # ---- JSONLogic-style rules, evaluated after the simple filters -------
+    # ---- how much work Sieve does (see COMPUTE_PRESETS) -----------------
+    "compute": {"preset": "balanced", **COMPUTE_PRESETS["balanced"],
+                # Check each channel at a pace that fits how often it uploads.
+                "adaptive_sync": True,
+                # Look for YouTube's automatic captions for videos without any.
+                "auto_captions": True},
+    # ---- where video data comes from ------------------------------------
+    # See upstream.py: auto uses Invidious when it answers and YouTube when not.
+    "source": {"backend": "auto",
+               # Sign yt-dlp in with this browser's YouTube cookies (same
+               # computer only); an uploaded cookies.txt takes precedence.
+               "cookies_browser": ""},
+    # ---- AI connection (llm.py): the key is stored apart, see llm.effective
+    "ai": {"provider": "", "model": "", "base_url": ""},
+    # The AI tuning scores, targets and weights by itself (autotune.py).
+    "ai_tune": {"enabled": False, "videos_per_hour": 15},
+    # ---- telling you things (notify.py) -----------------------------------
+    "notify": {
+        "webhook_url": "",           # e.g. https://ntfy.sh/your-secret-topic
+        "webhook_style": "ntfy",     # ntfy (plain text) | json
+        "push_alerts": True,         # send new uploads from alerted channels
+        "digest_hours": 0,           # 0 = no digest; 24 = daily; 168 = weekly
+    },
+    # ---- backups of the whole database (backups.py) ----------------------
+    # Automatic ones are off by default: each is a full copy of the database.
+    "backups": {"auto": False, "every_hours": 24, "keep": 5},
+    # ---- finding videos without an import (ingest.py, pulls.py) -----------
+    # A "pull" is one request to YouTube or Invidious: one channel's uploads,
+    # one search, one playlist, one video's details. Answers from the local
+    # cache are free and are not counted.
+    "pull": {
+        # After a Fetch, keep finding: follow the channels your ranking rates
+        # well and search your own phrases on every sync. Fetch itself only
+        # ever runs when you press it.
+        "auto": True,
+        "topics": ["science", "engineering", "history", "technology"],
+        "custom_topics": [],          # your own searches; any backend can search (ytsearch.py)
+        # Built-in well-known channels for each topic, pulled once: on the
+        # first fetch, or when you add the topic. Afterwards the channels the
+        # ranking rates well are kept up with as "followed" channels.
+        "starter_channels": True,
+        "follow_channels": 10,        # unsubscribed channels the ranking rates well
+        "per_pull": 20,               # videos kept from each channel or search
+        "region": "US",
+        # The pull limit. Off by default so an existing setup keeps syncing
+        # exactly as before; turned on, nothing Sieve does by itself may
+        # exceed limit_count pulls in any rolling limit_window minutes.
+        "limit_enabled": False,
+        "limit_count": 300,
+        "limit_window": 1440,
+        "limit_manual": False,        # count what I ask for too (Sync now, Sift, imports)
+    },
+    # ---- where videos open -----------------------------------------------
+    # See providers.py. An empty invidious_url means "the host in watch_base".
+    "playback": {
+        # "" = not chosen yet: Invidious when watch_base names a real host,
+        # Sieve's own player when it is the shipped local guess (providers.py).
+        "provider": "",
+        "invidious_url": "",
+        "piped_url": "https://piped.video",
+        "custom_url": "",
+        "menu": ["invidious", "piped", "youtube", "nocookie", "freetube", "custom"],
+        "resume": True,     # start partly watched videos where you left off
+        "new_tab": True,
+    },
     "rules": {"enabled": False, "expr": {"all": []}},
     # ---- homepage composition quotas -------------------------------------
     "budget": {

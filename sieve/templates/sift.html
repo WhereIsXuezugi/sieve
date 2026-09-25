@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Sift · Sieve{% endblock %}
+
+{% block body %}
+<h1>Sift</h1>
+<p class="lede">Search, or paste a channel, playlist or video link. Results are ranked with your settings, and anything filtered out is listed with the reason.</p>
+
+<form class="panel sift-form" method="get" action="/sift">
+  <input type="hidden" name="run" value="1">
+  <label class="sift-query">
+    <span class="name">Search YouTube, or paste a channel, playlist or video address. Leave it empty to search for your interests.</span>
+    <input type="search" name="q" value="{{ q }}" autocomplete="off" autofocus
+           placeholder="rust async runtimes · youtube.com/@3blue1brown · youtube.com/playlist?list=PL…">
+  </label>
+  <div class="sift-options">
+    <fieldset class="segmented">
+      <legend class="name">Treat it as</legend>
+      {% for k, label in [('auto','Work it out'), ('search','Search'), ('channel','Channel'), ('playlist','Playlist'), ('video','More like this video'), ('interests','My interests')] %}
+        <label><input type="radio" name="kind" value="{{ k }}" {{ 'checked' if kind == k }}><span>{{ label }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <label class="check" style="margin:0">
+      <input type="checkbox" name="filters" value="1" {{ 'checked' if filters }}>
+      <span>Apply my filters and rules</span>
+    </label>
+    <label style="margin:0">
+      <span class="name">How many to fetch</span>
+      <input type="number" name="limit" min="1" max="300" value="{{ limit or settings.compute.sift_limit }}" style="max-width:6rem">
+    </label>
+    <button class="btn" type="submit">Sift</button>
+  </div>
+  <p class="hint">Per-channel limits and quotas are off here. Results also join your catalogue.</p>
+</form>
+
+{% if error %}
+  <div class="notice bad">{{ error | sentence }}</div>
+{% endif %}
+
+{% if outcome %}
+  {% set d = outcome.diagnostics %}
+  <div class="readout">
+    <div><b>{{ outcome.fetched }}</b><small>fetched</small></div>
+    <div class="{{ 'warn' if d.rejected_total }}"><b>{{ d.rejected_total }}</b><small>rejected by your filters</small></div>
+    <div><b>{{ d.shown }}</b><small>ranked below</small></div>
+    <div><b>{{ (d.diversity * 100) | round | int }}%</b><small>topic diversity</small></div>
+  </div>
+  <p class="hint">Ranked {{ outcome.label }}{% if not outcome.filters %}, with your filters and rules <b>off</b>{% endif %}. <a href="/sift?q={{ q | urlencode }}&kind={{ kind }}&filters={{ 0 if outcome.filters else 1 }}&run=1">{{ 'Rank everything instead' if outcome.filters else 'Apply my filters instead' }}</a></p>
+
+  {% if outcome['items'] %}
+    <div class="grid {{ settings.homepage.density }}" data-cols="{{ settings.homepage.columns }}">
+      {% for item in outcome['items'] %}
+        {% set v = item.video %}
+        {% include "_card.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><p>Nothing survived your filters. The list below says why; or rank everything with the link above.</p></div>
+  {% endif %}
+
+  {% if outcome.rejected %}
+    <details class="panel sift-rejected" {{ 'open' if not outcome['items'] }}>
+      <summary><b>{{ outcome.rejected | length }} rejected</b>, and why</summary>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Video</th><th>Channel</th><th>Reason</th></tr></thead>
+          <tbody>
+            {% for e in outcome.rejected %}
+              <tr><td><a href="/video/{{ e.id }}">{{ e.title | truncate(70) }}</a></td>
+                  <td class="muted">{{ e.author | truncate(24) }}</td><td>{{ e.reason }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  {% endif %}
+{% endif %}
+{% endblock %}

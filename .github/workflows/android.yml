@@ -1,0 +1,63 @@
+# Builds the Android app.
+#
+#   * Every push that touches the app or the Python package: the APK is under
+#     the run's "Artifacts" (Actions tab → the run → sieve-android).
+#   * By hand: Actions → Android APK → Run workflow.
+#   * A version tag (git tag v0.7.0 && git push --tags): the APK is attached
+#     to a GitHub Release as sieve-android.apk — the README links to the latest.
+name: Android APK
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+    paths: ["android/**", "sieve/**", "pyproject.toml", ".github/workflows/android.yml"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write     # only used to attach the APK to a release, on tags
+
+jobs:
+  # The phone runs pure-Python dependencies (pydantic 1, plain uvicorn).
+  # Run the whole test suite on exactly that set first.
+  test-phone-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r android/app/requirements-android.txt pytest
+      - run: python -m pytest -q
+
+  apk:
+    needs: test-phone-dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      # Chaquopy compiles the app's Python with a matching Python on the build machine.
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      # The default package list includes the legacy "tools" package, which the
+      # current SDK repository no longer offers, so sdkmanager fails. AGP installs
+      # the platform and build-tools it needs on its own.
+      - uses: android-actions/setup-android@v3
+        with: { packages: "platform-tools" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+      - name: Build
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk sieve-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sieve-android
+          path: sieve-android.apk
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sieve-android.apk
+          generate_release_notes: true

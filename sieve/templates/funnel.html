@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Funnel · Sieve{% endblock %}
+
+{% block body %}
+<h1>Funnel</h1>
+<p class="lede">Every video the homepage considered, and why each one was or wasn't shown.</p>
+
+<section class="panel funnel-bars" aria-label="The funnel">
+  {% set widest = total or 1 %}
+  <div class="funnel-row">
+    <span class="funnel-label">Considered</span>
+    <span class="funnel-track"><i style="width:100%"></i></span>
+    <b class="mono">{{ total }}</b>
+  </div>
+  <div class="funnel-row">
+    <span class="funnel-label">Passed every filter</span>
+    <span class="funnel-track"><i style="width: {{ ((counts.shown + counts.ranked) / widest * 100) | round(1) }}%"></i></span>
+    <b class="mono">{{ counts.shown + counts.ranked }}</b>
+  </div>
+  <div class="funnel-row">
+    <span class="funnel-label">On your page</span>
+    <span class="funnel-track"><i style="width: {{ (counts.shown / widest * 100) | round(1) }}%"></i></span>
+    <b class="mono">{{ counts.shown }}</b>
+  </div>
+</section>
+
+<div class="funnel-controls wrap-actions" role="toolbar" aria-label="Filter the funnel">
+  <button class="btn ghost" type="button" data-stage="" aria-pressed="true">All <span class="mono">{{ total }}</span></button>
+  <button class="btn ghost" type="button" data-stage="shown" aria-pressed="false">Shown <span class="mono">{{ counts.shown }}</span></button>
+  <button class="btn ghost" type="button" data-stage="ranked" aria-pressed="false">Ranked, left off <span class="mono">{{ counts.ranked }}</span></button>
+  <button class="btn ghost" type="button" data-stage="rejected" aria-pressed="false">Rejected <span class="mono">{{ counts.rejected }}</span></button>
+  <input type="search" id="funnel-search" placeholder="Find a title, channel, reason or video id" aria-label="Find in the funnel">
+</div>
+
+{% if reasons %}
+  <p class="hint">Why videos did not make the page:
+    {% for reason, n in reasons[:8] %}
+      <button type="button" class="chip" data-reason="{{ reason }}">{{ reason }} <span class="mono">{{ n }}</span></button>
+    {% endfor %}
+  </p>
+{% endif %}
+
+<p class="why-key" aria-label="What the colours in the score bars mean">
+  {% for key, label in [('source','source'), ('interest','interests'), ('preference','score targets'), ('channel','channel'), ('channel_quality','channel quality'), ('learned','learned'), ('freshness','freshness'), ('novelty','novelty'), ('continue','unfinished')] %}
+    <span><i data-k="{{ key }}"></i>{{ label }}</span>
+  {% endfor %}
+</p>
+
+<div class="panel scroll">
+  <table class="funnel-table">
+    <thead>
+      <tr><th class="num">#</th><th>Video</th><th>Fate</th><th class="num">Score</th><th class="col-optional">Why it scored that way</th></tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+        <tr data-stage="{{ e.stage }}"
+            data-text="{{ (e.title ~ ' ' ~ e.author ~ ' ' ~ e.reason ~ ' ' ~ e.id) | lower }}">
+          <td class="num">{{ (e.slot + 1) if e.slot is not none else '' }}</td>
+          <td>
+            <a href="/video/{{ e.id }}">{{ e.title | truncate(64) }}</a>
+            <div class="muted" style="font-size:.76rem">{{ e.author }}{% if e.duration %} · <span class="mono">{{ e.duration | duration }}</span>{% endif %}</div>
+          </td>
+          <td>
+            <span class="tag {{ 'allow' if e.stage == 'shown' else ('block' if e.stage == 'rejected' else '') }}">{{ e.stage }}</span>
+            {% if e.reason %}<div style="font-size:.8rem">{{ e.reason }}</div>{% endif %}
+          </td>
+          <td class="num">{{ '%.3f' | format(e.score) if e.score is not none else '—' }}</td>
+          <td class="col-optional">
+            {% if e.explanation %}
+              <div class="why"><div class="bar" style="min-width:9rem">
+                {% for part in e.explanation if not part.negative %}<i data-k="{{ part.key }}" style="width: {{ part.percent }}%" title="{{ part.percent }}% {{ part.label }}"></i>{% endfor %}
+              </div></div>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Nothing was considered. Import subscriptions, or run a sync, and come back.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p id="funnel-empty" class="muted" hidden>No videos match.</p>
+</div>
+{% endblock %}

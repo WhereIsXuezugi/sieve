@@ -3,7 +3,7 @@
 
 {% block body %}
 <h1>Analytics</h1>
-<p class="lede">Your own watching, measured against your own database. Nothing leaves this machine.</p>
+<p class="lede">Your viewing, from your own data. Nothing leaves this machine.</p>
 
 <div class="readout">
   <div><b>{{ data.watch_hours }}</b><small>hours in {{ days }} days</small></div>
@@ -102,7 +102,7 @@
 
 <section class="panel">
   <h2>Watched more than once</h2>
-  <p class="hint">Rewatches are the strongest interest signal you produce, and the only one nobody fakes.</p>
+  <p class="hint">Videos you watched more than once.</p>
   <table>
     <tbody>
       {% for row in rewatches %}
@@ -120,7 +120,7 @@
 
 <section class="panel">
   <h2>Shown often, never watched</h2>
-  <p class="hint">If something keeps appearing and you keep ignoring it, the ranking is wrong about you. Tell it so.</p>
+  <p class="hint">Shown often, never opened. Hide them, or tell Sieve less.</p>
   <table>
     <tbody>
       {% for row in blind_spots %}

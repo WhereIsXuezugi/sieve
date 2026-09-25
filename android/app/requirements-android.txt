@@ -1,0 +1,15 @@
+# What runs on the phone. Pure Python only: Chaquopy cannot compile C or Rust
+# at build time, so pydantic 1 (pure Python) instead of pydantic 2 (Rust core),
+# and plain uvicorn instead of uvicorn[standard] (uvloop, httptools).
+# Tested on desktop CPython with exactly these pins: see android/README.md.
+fastapi==0.110.3
+starlette==0.37.2
+pydantic==1.10.21
+uvicorn==0.29.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.27.2
+jinja2==3.1.4
+markupsafe==2.1.5
+python-multipart==0.0.9
+yt-dlp

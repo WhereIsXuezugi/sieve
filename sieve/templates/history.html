@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}History · Sieve{% endblock %}
+
+{% block body %}
+<h1>History</h1>
+<p class="lede">Everything Sieve has recorded, newest first. Delete any line; interests update to match.</p>
+
+<div class="wrap-actions" role="tablist" style="margin-bottom:1rem">
+  {% for k, label in [('watches','Watches'), ('opens','Opens'), ('feedback','Feedback')] %}
+    <a class="btn ghost" role="tab" href="/history?kind={{ k }}" aria-selected="{{ 'true' if kind == k else 'false' }}"
+       {% if kind == k %}style="border-color:var(--indigo);color:var(--indigo)"{% endif %}>{{ label }} <span class="mono">{{ totals[k] }}</span></a>
+  {% endfor %}
+</div>
+
+<p class="hint">
+  {% if kind == 'watches' %}How far into each video you got. <b>Import</b> rows come from an export; <b>player</b> rows from Sieve's player or a player script, one per viewing.
+  {% elif kind == 'opens' %}Videos you opened from Sieve, and where. An open says nothing about how much you watched, so it teaches the ranker nothing by itself.
+  {% else %}The more, less, deeper and shorter buttons, and what each was about.{% endif %}
+</p>
+
+<div class="panel scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>When</th><th>Video</th>
+        {% if kind == 'watches' %}<th class="num">Watched</th><th class="col-optional">From</th>
+        {% elif kind == 'opens' %}<th>Opened in</th>
+        {% else %}<th>Said</th>{% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in listing.records %}
+        <tr data-record="{{ r.record }}" data-kind="{{ kind }}">
+          <td class="mono" style="font-size:.78rem;white-space:nowrap" title="{{ r.at }}">{{ r.at | ago }}</td>
+          <td>
+            <a href="/video/{{ r.video_id }}">{{ (r.title or r.video_id) | truncate(64) }}</a>
+            {% if r.author %}<div class="muted" style="font-size:.76rem">{{ r.author }}</div>{% endif %}
+          </td>
+          {% if kind == 'watches' %}
+            <td class="num"><span class="meter teal" title="{{ (r.progress * 100) | round | int }}%" style="display:inline-block;vertical-align:middle"><i style="width: {{ (r.progress * 100) | round | int }}%"></i></span>
+              <span class="mono" style="font-size:.78rem">{{ (r.progress * 100) | round | int }}%</span></td>
+            <td class="col-optional muted" style="font-size:.8rem">{{ r.origin }}</td>
+          {% elif kind == 'opens' %}
+            <td style="font-size:.85rem">{{ r.provider or '—' }}</td>
+          {% else %}
+            <td style="font-size:.85rem">{{ r.kind.replace('_', ' ') }}</td>
+          {% endif %}
+          <td class="right"><button class="btn ghost" type="button" data-record-delete
+              style="font-size:.72rem;padding:.02rem .35rem" aria-label="Delete this record">Delete</button></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Nothing recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if pages > 1 %}
+  <p class="wrap-actions">
+    {% if page_no > 1 %}<a class="btn ghost" href="/history?kind={{ kind }}&page_no={{ page_no - 1 }}">Newer</a>{% endif %}
+    <span class="muted">Page {{ page_no }} of {{ pages }}</span>
+    {% if page_no < pages %}<a class="btn ghost" href="/history?kind={{ kind }}&page_no={{ page_no + 1 }}">Older</a>{% endif %}
+  </p>
+{% endif %}
+
+{% if listing.total %}
+  <section class="panel" style="border-color:var(--clay)">
+    <h2>Forget all {{ kind }}</h2>
+    <p class="hint">Deletes all {{ listing.total }}. Make a backup first under Controls if you might want them back.</p>
+    <button class="btn danger" type="button" data-forget="{{ kind }}">Forget all {{ kind }}…</button>
+    <span id="forget-status" class="hint" role="status"></span>
+  </section>
+{% endif %}
+{% endblock %}

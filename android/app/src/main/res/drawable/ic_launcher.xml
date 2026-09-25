@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A sieve: a bowl with a mesh, in Sieve's indigo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#3F3AA8" android:pathData="M24,2a22,22 0 1,0 0.001,0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M11,19h26c0,8 -5.8,14 -13,14s-13,-6 -13,-14z" />
+    <path android:strokeColor="#3F3AA8" android:strokeWidth="1.4"
+          android:pathData="M15,23h18M13.5,27h21M18,20v11M24,20v13M30,20v11" />
+    <path android:fillColor="#FFFFFF" android:pathData="M37,20.5l5,-2.5v2.4l-5,2.3z" />
+</vector>
