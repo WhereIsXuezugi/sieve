@@ -39,7 +39,7 @@ vision = ["pillow>=10", "opennsfw2>=0.13"]
 # Fetch from YouTube directly with full detail: durations, whole playlists,
 # search and captions. Without it, YouTube's RSS feeds still work.
 youtube = ["yt-dlp>=2025.1.1"]
-dev = ["pytest>=8", "ruff>=0.3"]
+dev = ["pytest>=9.1.1", "ruff>=0.3"]
 
 [project.urls]
 Homepage = "https://github.com/whereixuezugi/sieve"
