@@ -7,8 +7,8 @@
 
 **Your own YouTube recommendations — ranked by rules you can see and change.**
 
-[![ci](https://github.com/whereixuezugi/sieve/actions/workflows/ci.yml/badge.svg)](https://github.com/whereixuezugi/sieve/actions/workflows/ci.yml)
-[![Android APK](https://github.com/whereixuezugi/sieve/actions/workflows/android.yml/badge.svg)](https://github.com/whereixuezugi/sieve/actions/workflows/android.yml)
+[![ci](https://github.com/whereixuezugi/sieve/actions/workflows/ci.yml/badge.svg)](https://github.com/WhereIsXuezugi/sieve/actions/workflows/ci.yml)
+[![Android APK](https://github.com/whereixuezugi/sieve/actions/workflows/android.yml/badge.svg)](https://github.com/WhereIsXuezugi/sieve/actions/workflows/android.yml)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3f3aa8)
 ![Local only](https://img.shields.io/badge/data-stays%20on%20your%20machine-0f6b60)
 
