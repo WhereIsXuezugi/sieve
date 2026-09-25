@@ -35,7 +35,7 @@ dependencies = [
 # Only needed if you want real embeddings instead of the built-in hashed
 # TF-IDF vectors, or local NSFW frame scoring. Neither is required.
 embeddings = ["onnxruntime>=1.17", "tokenizers>=0.15"]
-vision = ["pillow>=10", "opennsfw2>=0.13"]
+vision = ["pillow>=12.3.0", "opennsfw2>=0.13"]
 # Fetch from YouTube directly with full detail: durations, whole playlists,
 # search and captions. Without it, YouTube's RSS feeds still work.
 youtube = ["yt-dlp>=2025.1.1"]
