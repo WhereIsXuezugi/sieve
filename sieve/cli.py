@@ -1,7 +1,7 @@
 """Command line interface.
 
     sieve serve                      run the web app
-    sieve sync [--deep]              refresh the catalogue from Invidious
+    sieve sync [--deep]              pull new videos from YouTube or Invidious
     sieve score [--all]              score anything unscored
     sieve import subs FILE           import a subscription export
     sieve import history FILE        import a watch-history export
@@ -13,8 +13,16 @@
     sieve vision                     score thumbnails (needs the 'vision' extra)
     sieve doctor                     diagnose an empty or wrong-looking homepage
     sieve profile export/import      move configurations between machines
-    sieve demo                       fill the database with synthetic videos
+    sieve demo [--topics a,b]        fill the catalogue with real videos for some topics
+    sieve demo --synthetic           or with invented ones, for trying the controls offline
+    sieve demo remove                delete the synthetic demo catalogue
+    sieve fetch [--topics a,b]       find videos for your topics (never runs by itself)
+    sieve backup [list|create]       backups of the whole database
+    sieve backup restore NAME        roll back to one, in place (delete NAME to remove)
+    sieve reset pulled               delete the videos Sieve found for you
+    sieve pulls [reset]              requests made to YouTube or Invidious, and the limit
     sieve prune                      drop stale rows and vacuum
+    sieve reset catalogue|everything delete every video, or factory-reset (backs up first)
     sieve stats                      what is in the database
 """
 
@@ -22,19 +30,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 import sys
 import time
 from pathlib import Path
 
+from . import __version__, ingest, learner, profiles
 from . import channels as channel_policy
-from . import ingest, learner, profiles
 from . import interests as interest_store
 from .community import CommunityData
 from .config import Config
 from .db import Database
+from .demo import remove_demo, seed_demo  # seed_demo is also imported from here by tests
 from .doctor import doctor_report
-from .invidious import Invidious
+from .starter import TOPICS
+from .upstream import Upstream
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sieve", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", help="path to a TOML config file")
+    parser.add_argument("--version", action="version",
+                        version=f"sieve {__version__} ({Path(__file__).resolve().parent})",
+                        help="print the version and where it is installed, then exit")
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="run the web application")
@@ -58,7 +70,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="do not run background sync and scoring")
 
     sync = sub.add_parser("sync", help="refresh the catalogue")
-    sync.add_argument("--deep", action="store_true", help="also search your top interests")
+    sync.add_argument("--deep", action="store_true",
+                      help="at least eight searches, and every starter channel for your topics")
 
     score = sub.add_parser("score", help="score videos")
     score.add_argument("--all", action="store_true", help="rescore everything")
@@ -91,12 +104,38 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("stats", help="show database counts")
     sub.add_parser("prune", help="drop stale rows and vacuum")
 
+    reset = sub.add_parser("reset", help="delete every video, or factory-reset everything")
+    reset.add_argument("scope", choices=["pulled", "catalogue", "everything"],
+                       help="pulled: the videos Sieve found for you; "
+                            "catalogue: every video and score, keeping your data; "
+                            "everything: back to a fresh install")
+    reset.add_argument("--yes", action="store_true", help="skip the typed confirmation")
+    reset.add_argument("--no-backup", action="store_true", help="do not write a backup first")
+
     prof = sub.add_parser("profile", help="export or import a configuration")
     prof.add_argument("action", choices=["export", "import"])
     prof.add_argument("path", nargs="?")
 
-    demo = sub.add_parser("demo", help="populate a synthetic catalogue for trying the controls")
-    demo.add_argument("--count", type=int, default=400)
+    demo = sub.add_parser("demo", help="fill the catalogue with real videos (or --synthetic ones)")
+    demo.add_argument("action", nargs="?", choices=["remove"],
+                      help="remove: delete the synthetic demo catalogue")
+    demo.add_argument("--synthetic", action="store_true",
+                      help="invented videos, no network needed; they cannot be played")
+    demo.add_argument("--topics", help="comma-separated topics: " + ", ".join(TOPICS))
+    demo.add_argument("--count", type=int, default=400, help="how many synthetic videos")
+
+    pulls = sub.add_parser("pulls", help="requests made to YouTube or Invidious, and the pull limit")
+    pulls.add_argument("action", nargs="?", choices=["reset"],
+                       help="reset: forget recorded pulls, so the limit starts from zero")
+
+    fetch = sub.add_parser("fetch", help="find videos for your topics now (never runs by itself)")
+    fetch.add_argument("--topics", help="comma-separated, replacing the chosen ones: " + ", ".join(TOPICS))
+
+    backup = sub.add_parser("backup", help="list, make, delete or roll back to backups")
+    backup.add_argument("action", nargs="?", default="list",
+                        choices=["list", "create", "delete", "restore"])
+    backup.add_argument("name", nargs="?", help="the backup's file name (see `sieve backup list`)")
+    backup.add_argument("--yes", action="store_true", help="skip the typed confirmation")
 
     args = parser.parse_args(argv)
     cfg = Config.load(args.config)
@@ -111,13 +150,16 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn.run(app, host=args.host or cfg.host, port=args.port or cfg.port, log_level="info")
         return 0
 
-    api = Invidious(cfg, db)
+    api = Upstream(cfg, db)
     community = CommunityData(cfg, db)
     ingestor = ingest.Ingestor(cfg, db, api, community)
 
     try:
         if args.command == "sync":
-            print(json.dumps(ingestor.sync(deep=args.deep), indent=2))
+            counts = ingestor.sync(deep=args.deep)
+            print(json.dumps(counts, indent=2))
+            if counts.get("stopped"):
+                print(f"stopped early: {counts['stopped']}", file=sys.stderr)
             channel_policy.recompute_affinity(db)
             interest_store.derive_from_history(db)
 
@@ -176,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "vision":
             from . import vision
 
-            print(json.dumps(vision.score_pending(db, cfg, args.limit), indent=2))
+            print(json.dumps(vision.score_pending(db, cfg, args.limit, api.thumbnail_url), indent=2))
 
         elif args.command == "doctor":
             print(json.dumps(doctor_report(cfg, db, api, quick=args.quick), indent=2))
@@ -186,6 +228,29 @@ def main(argv: list[str] | None = None) -> int:
 
         elif args.command == "stats":
             print(json.dumps(db.stats(), indent=2))
+
+        elif args.command == "reset":
+            from . import actions
+
+            what = {
+                "everything": "This erases everything: videos, settings, history, subscriptions, "
+                              "channel lists, interests and saved profiles.",
+                "catalogue": "This deletes every video and score, keeping your subscriptions, "
+                             "history and settings.",
+                "pulled": "This deletes the videos Sieve found for you, keeping your "
+                          "subscriptions' and playlists' videos and anything you watched or rated.",
+            }[args.scope]
+            confirm = "reset" if args.yes else input(
+                f"{what}\nA backup is written first. Type \"reset\" to continue: ")
+            try:
+                if args.scope == "pulled":
+                    result = actions.reset_pulled(db, confirm, backup=not args.no_backup)
+                else:
+                    result = actions.reset(db, args.scope, confirm, backup=not args.no_backup)
+            except actions.ActionError as exc:
+                print(exc)
+                return 1
+            print(json.dumps(result, indent=2))
 
         elif args.command == "prune":
             print(json.dumps(db.prune(), indent=2))
@@ -204,174 +269,85 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(profiles.import_profile(db, body), indent=2))
 
         elif args.command == "demo":
-            print(json.dumps(seed_demo(db, args.count), indent=2))
+            if args.action == "remove":
+                print(json.dumps(remove_demo(db), indent=2))
+            elif args.synthetic:
+                print(json.dumps(seed_demo(db, args.count), indent=2))
+            else:
+                topics = [t.strip() for t in (args.topics or "").split(",") if t.strip()] or None
+                unknown = [t for t in topics or [] if t not in TOPICS]
+                if unknown:
+                    print(f"unknown topics: {', '.join(unknown)}; choose from {', '.join(TOPICS)}")
+                    return 1
+                print("pulling real videos; this takes a minute…", file=sys.stderr)
+                counts = ingestor.bootstrap(topics)
+                channel_policy.recompute_quality(db)
+                print(json.dumps(counts, indent=2))
+                if not counts.get("seen"):
+                    print("Nothing arrived, so YouTube and Invidious are probably unreachable from "
+                          "here (`sieve doctor` says which). To try the controls offline, run "
+                          "`sieve demo --synthetic`.", file=sys.stderr)
+                    return 1
+
+        elif args.command == "pulls":
+            if args.action == "reset":
+                from . import actions
+
+                print(f"forgot {actions.reset_pull_counter(db)} recorded pulls")
+            print(api.budget.summary())
+            print(json.dumps(api.budget.status(), indent=2))
+
+        elif args.command == "fetch":
+            from . import actions
+
+            topics = [t.strip() for t in (args.topics or "").split(",") if t.strip()] or None
+            unknown = [t for t in topics or [] if t not in TOPICS]
+            if unknown:
+                print(f"unknown topics: {', '.join(unknown)}; choose from {', '.join(TOPICS)}")
+                return 1
+            print("fetching; this can take a minute…", file=sys.stderr)
+            try:
+                counts = ingestor.bootstrap(topics)
+            except actions.ActionError as exc:
+                print(exc)
+                return 1
+            print(json.dumps(counts, indent=2))
+            if counts.get("stopped"):
+                print(f"stopped early: {counts['stopped']}", file=sys.stderr)
+
+        elif args.command == "backup":
+            from . import backups
+
+            if args.action == "list":
+                for b in backups.listing(db):
+                    print(f"{b['name']}  {b['kind']:<14} {b['bytes'] / 1048576:7.1f} MB  "
+                          f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(b['created_at']))}")
+                if not backups.listing(db):
+                    print("no backups yet")
+            elif args.action == "create":
+                made = backups.create(db, "manual")
+                print(made.name if made else "nothing to back up (in-memory database)")
+            elif not args.name:
+                print(f"`sieve backup {args.action}` needs a name; see `sieve backup list`")
+                return 1
+            elif args.action == "delete":
+                if not backups.delete(db, args.name):
+                    print(f"no backup called {args.name}")
+                    return 1
+                print(f"deleted {args.name}")
+            else:
+                confirm = "restore" if args.yes else input(
+                    f"Roll back to {args.name}? Everything now is replaced by it, after being "
+                    "backed up itself. Type \"restore\" to continue: ")
+                try:
+                    print(json.dumps(backups.restore(db, args.name, confirm), indent=2))
+                except backups.BackupError as exc:
+                    print(exc)
+                    return 1
     finally:
         api.close()
         community.close()
     return 0
-
-
-# --------------------------------------------------------------------------
-# Demo data
-# --------------------------------------------------------------------------
-
-DEMO_CHANNELS = [
-    ("UC_kernel", "Kernel Internals", 84000, "technical"),
-    ("UC_forge", "Backyard Forge", 51000, "hobby"),
-    ("UC_lect", "Mathematics Lectures", 310000, "academic"),
-    ("UC_rev", "Reverse Engineering Weekly", 22000, "technical"),
-    ("UC_slop", "Daily Clip Machine", 1900000, "meme"),
-    ("UC_react", "Reaction Central", 4200000, "meme"),
-    ("UC_lofi", "Lofi Radio - Topic", 760000, "music"),
-    ("UC_space", "Orbital Mechanics", 140000, "academic"),
-    ("UC_repair", "Fix It Properly", 68000, "hobby"),
-    ("UC_ai", "AI Narrated Facts", 330000, "ai"),
-]
-
-DEMO_TITLES = {
-    "technical": [
-        "Writing a page allocator from scratch", "How the scheduler picks the next task",
-        "Tracing a syscall through the kernel", "Building a toy compiler backend",
-        "Cache coherency explained with a logic analyser", "Fuzzing a parser until it breaks",
-        "Reading disassembly without an IDE", "Why your mutex is slower than you think",
-    ],
-    "academic": [
-        "Lecture 7: manifolds and charts", "A proof of the spectral theorem",
-        "Orbital transfers, derived properly", "Introduction to measure theory, part 3",
-        "Numerical methods for stiff systems", "The derivation nobody shows you",
-    ],
-    "hobby": [
-        "Forging a chisel from a leaf spring", "Restoring a seized 1960s lathe",
-        "Rebuilding a bandsaw gearbox", "Casting aluminium in the back garden",
-        "Repairing a bench power supply", "Making a jig that actually holds square",
-    ],
-    "meme": [
-        "SHOCKING moments that broke the internet 😱", "I tried this for 24 HOURS (gone wrong)",
-        "Ranking EVERY single one #shorts", "you won't BELIEVE what happens next",
-        "POV: it's 3am and the algorithm won 💀", "Tier list of things nobody asked about",
-    ],
-    "music": [
-        "lofi beats to not study to [1 hour mix]", "Official Music Video - Night Drive",
-        "Ambient set, live session", "Remix (extended instrumental)",
-    ],
-    "ai": [
-        "10 facts about the ocean (AI narrated)", "The history of concrete, text-to-speech documentary",
-        "Top 5 mysteries explained by AI voice", "Generated using AI: the future of transport",
-    ],
-}
-
-DEMO_SUFFIXES = [
-    "part 2", "part 3", "revisited", "follow-up", "the long version",
-    "annotated", "one year later", "corrections", "extended cut", "appendix",
-]
-
-DEMO_TRANSCRIPTS = {
-    "technical": "we allocate a page from the buddy allocator then map it into the process address space "
-                 "the kernel keeps a free list per order so the lookup stays constant time under contention "
-                 "a mutex here would serialise every fault so we use a per-cpu cache instead register "
-                 "pressure matters because the compiler spills to the stack and that costs a cache miss",
-    "academic": "consider a smooth manifold with an atlas of charts each transition map is a diffeomorphism "
-                "the theorem follows from the spectral decomposition of a self adjoint operator we derive "
-                "the integral by parts and the boundary term vanishes because the support is compact",
-    "hobby": "i heated the leaf spring to a bright orange and drew it out on the anvil then normalised it "
-             "three times before hardening in oil the temper colour we want is a light straw so back it off "
-             "slowly and keep the edge cool while grinding",
-    "meme": "yo chat this is actually insane bro look at this wait for it okay okay okay that's crazy "
-            "no way bro that's actually crazy chat drop a like",
-    "music": "",
-    "ai": "the ocean covers seventy one percent of the earth surface. it contains an estimated one point "
-          "three three five billion cubic kilometres of water. this is fact number two. the deepest point "
-          "is the challenger deep. this is fact number three.",
-}
-
-
-def seed_demo(db: Database, count: int = 400) -> dict[str, int]:
-    """Build a synthetic catalogue so the controls can be explored offline.
-
-    Useful for development and for deciding whether you like the shape of the
-    thing before pointing it at a real instance.
-    """
-    from . import scoring
-
-    rng = random.Random(1979)
-    now = int(time.time())
-    videos = []
-    for index in range(count):
-        cid, name, subs, kind = DEMO_CHANNELS[index % len(DEMO_CHANNELS)]
-        # Walk the title list rather than sampling it, so a demo catalogue does
-        # not show the same headline four times on one screen.
-        titles = DEMO_TITLES[kind]
-        slot = (index // len(DEMO_CHANNELS))
-        title = titles[slot % len(titles)]
-        series = slot // len(titles)
-        if series:
-            title = f"{title} ({DEMO_SUFFIXES[series % len(DEMO_SUFFIXES)]})"
-        if kind == "meme":
-            duration = rng.choice([35, 48, 61, 95, 180, 240])
-        elif kind == "music":
-            duration = rng.choice([210, 240, 3600, 4200])
-        elif kind == "academic":
-            duration = rng.randint(1500, 5400)
-        else:
-            duration = rng.randint(400, 3000)
-        views = int(rng.lognormvariate(10.5 if kind in {"meme", "music"} else 8.6, 1.3))
-        description = {
-            "technical": "Source: https://github.com/example/demo\n0:00 intro\n2:14 the allocator\n11:40 benchmarks",
-            "academic": "Notes and problem sets linked. Reference: https://arxiv.org/abs/2401.00000\n0:00 setup\n6:30 proof",
-            "hobby": "Tools used are listed below. Sponsored by nobody.",
-            "meme": "LIKE AND SUBSCRIBE 🔥🔥 #shorts",
-            "music": "Official audio. Stream everywhere.",
-            "ai": "This video was generated using AI text-to-speech narration.",
-        }[kind]
-        videos.append({
-            "id": f"demo{index:04d}",
-            "title": title if kind != "meme" else title.upper()[:70],
-            "author": name,
-            "author_id": cid,
-            "published": now - rng.randint(0, 90) * 86400,
-            "duration": duration,
-            "views": views,
-            "likes": int(views * rng.uniform(0.01, 0.06)),
-            "description": description,
-            "keywords": {"technical": ["kernel", "systems", "c"], "academic": ["mathematics", "lecture"],
-                         "hobby": ["workshop", "restoration"], "meme": ["funny", "compilation", "shorts"],
-                         "music": ["music", "mix", "lofi"], "ai": ["facts", "documentary"]}[kind],
-            "genre": {"technical": "Science & Technology", "academic": "Education", "hobby": "Howto & Style",
-                      "meme": "Entertainment", "music": "Music", "ai": "Education"}[kind],
-            "is_live": 0, "is_upcoming": 0, "family_safe": 1, "sub_count": subs,
-            "caption_langs": ["en"] if kind != "music" else [],
-            "transcript": DEMO_TRANSCRIPTS[kind] * (3 if duration > 900 else 1),
-        })
-
-    db.upsert_videos(videos)
-    db.executemany(
-        "INSERT INTO subscriptions(channel_id, name, weight, added_at) VALUES(?,?,1.0,?) "
-        "ON CONFLICT(channel_id) DO NOTHING",
-        [(cid, name, now) for cid, name, _, _ in DEMO_CHANNELS[:6]],
-    )
-
-    rows = []
-    for video in videos:
-        card = scoring.score_video(video, video["transcript"])
-        rows.append(scoring.card_to_row(card))
-    db.executemany(scoring.INSERT_SCORE, rows)
-
-    # A plausible history: mostly technical and academic, a little late-night meme.
-    watched = []
-    for video in videos:
-        kind_weight = {"Science & Technology": 0.45, "Education": 0.35,
-                       "Howto & Style": 0.2, "Entertainment": 0.08, "Music": 0.05}
-        if rng.random() < kind_weight.get(video["genre"], 0.1):
-            progress = rng.uniform(0.55, 1.0) if video["genre"] != "Entertainment" else rng.uniform(0.05, 0.4)
-            watched.append((video["id"], now - rng.randint(0, 60) * 86400, progress, 0, "demo"))
-    db.executemany(
-        "INSERT INTO history(video_id, watched_at, progress, dwell, origin) VALUES(?,?,?,?,?)", watched
-    )
-
-    channel_policy.recompute_affinity(db)
-    derived = interest_store.derive_from_history(db)
-    learner.train_from_events(db)
-    return {"videos": len(videos), "watched": len(watched), "interests": derived}
 
 
 if __name__ == "__main__":

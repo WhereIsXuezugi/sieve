@@ -3,13 +3,13 @@
 
 {% block body %}
 <h1>Rules</h1>
-<p class="lede">Everything the sliders cannot express. Rules run after the simple filters, and the preview below shows what they would do to your current catalogue as you type.</p>
+<p class="lede">For what sliders can't express. The preview shows the effect on your catalogue as you type; a rule saves once it is valid.</p>
 
 <div class="cols-2">
 
 <section class="panel">
   <div class="check">
-    <input type="checkbox" id="rule-enabled" {{ 'checked' if settings.rules.enabled }}>
+    <input type="checkbox" id="rule-enabled" data-rule-autosave {{ 'checked' if settings.rules.enabled }}>
     <label for="rule-enabled" style="margin:0">Apply this rule</label>
   </div>
   <label>
@@ -17,8 +17,8 @@
     <textarea id="rule-json" rows="18" spellcheck="false">{{ expr }}</textarea>
   </label>
   <p class="wrap-actions">
-    <button class="btn" type="button" id="rule-save">Save rule</button>
     <span id="rule-status" class="tag"></span>
+    <span id="rule-saved" class="muted" style="font-size:.8rem" role="status" aria-live="polite"></span>
   </p>
 
   <h3>Start from one of these</h3>
@@ -55,7 +55,7 @@
       <h3>Operators</h3>
       <p class="mono" style="font-size:.78rem">{{ operators | join(" · ") }}</p>
       <h3>Notes</h3>
-      <p class="hint"><span class="mono">between</span> takes a two-element list. <span class="mono">matches</span> takes a regular expression. <span class="mono">any_of</span> and <span class="mono">none_of</span> work on list fields like <span class="mono">keywords</span> and <span class="mono">topics</span>.</p>
+      <p class="hint"><span class="mono">between</span> takes two numbers; <span class="mono">matches</span> takes a regular expression.</p>
     </div>
     <div>
       <h3>Fields</h3>

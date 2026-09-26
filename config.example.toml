@@ -7,6 +7,8 @@ data_dir = "~/.local/share/sieve"
 host = "127.0.0.1"
 port = 8377
 
+# Your Invidious instance, if you run one. Without one, Sieve reads YouTube
+# directly; choose under Controls, Getting videos.
 # Your Invidious instance first. Extra entries are failover only — Sieve moves
 # down the list when one stops answering and stays on whichever worked last.
 instances = ["http://127.0.0.1:3000"]
@@ -40,6 +42,12 @@ community_ttl = 259200
 # Both are off by default. Turn them on from the Controls page, or here:
 #   they are user settings, not deployment settings, so the toggles live in the
 #   database — this file only decides which servers to ask.
+
+# ---------------------------------------------------------------------------
+# YouTube, for the "YouTube directly" and "Automatic" backends
+# ---------------------------------------------------------------------------
+youtube_url = "https://www.youtube.com"
+use_ytdlp = true             # false: YouTube's feeds only, even if yt-dlp is installed
 
 # ---------------------------------------------------------------------------
 # Similarity vectors

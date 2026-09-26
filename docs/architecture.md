@@ -1,5 +1,17 @@
 # Architecture
 
+## Two backends, one shape
+
+Sieve reads the catalogue from Invidious, from YouTube directly, or from
+whichever answers (`upstream.py`). Both clients return Invidious-shaped JSON,
+so nothing above them knows which one was used.
+
+Two details keep that honest. A refresh only overwrites a stored field when it
+knows something — an RSS entry has no duration, an Invidious channel listing no
+likes, and neither may erase what a fuller lookup found (`db._merge_rule`). And
+a Short is a stored fact (`is_short`), known from its `/shorts/` link even when
+its length is not.
+
 ## Why this is not a fork
 
 Sieve is called a fork in casual conversation and is not one. It runs alongside
@@ -84,6 +96,15 @@ channel affinity is what watch time implies; channel quality is what the
 channel's own catalogue looks like. Three columns, three contributions, reported
 separately.
 
+## The ledger
+
+`ranking.recommend(..., ledger=True)` returns every candidate and its fate:
+`shown` with its slot, `ranked` with why it was left off (a per-channel cap,
+a quota, a daily cap, or below the cut at rank *n*), or `rejected` with the
+filter that removed it. The Funnel page, Sift's rejection list and
+`GET /api/funnel` all read it. `record=False` keeps such a pass out of the
+impression history, so looking never counts as being shown.
+
 ## Storage
 
 SQLite in WAL mode. One file, no daemon, readable with `sqlite3` — which matters
@@ -163,7 +184,10 @@ Controls page cannot.
 | `vision.py` | optional thumbnail NSFW scoring |
 | `analytics.py` | dashboard aggregations |
 | `ingest.py` | sync, scoring worker, importers |
-| `invidious.py` | API client with failover and caching |
+| `invidious.py` | Invidious API client with failover and caching |
+| `youtube.py` | YouTube directly: RSS feeds, and yt-dlp when installed |
+| `sift.py` | runs the ranking over a search, channel, playlist or video |
+| `upstream.py` | chooses between the two, with automatic fallback |
 | `db.py` | SQLite layer and migrations |
 | `textutil.py` | tokenizer, lexicons, sparse vectors |
 

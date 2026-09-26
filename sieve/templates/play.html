@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title | truncate(50) if video else video_id }} · Sieve{% endblock %}
+
+{% block body %}
+<div class="player-page">
+  {% if local %}
+  {# The offline copy: a plain video element, no YouTube involved. #}
+  <div class="player">
+    <video controls autoplay preload="metadata" src="/media/{{ video_id }}#t={{ start or 0 }}"
+           data-local-video="{{ video_id }}"></video>
+  </div>
+  {% else %}
+  <div class="player" data-player data-video="{{ video_id }}" data-start="{{ start or 0 }}"
+       data-duration="{{ video.duration if video else 0 }}">
+    {# src is set by player.js: the embed's origin parameter must be the address
+       the browser sees, which behind a reverse proxy the server cannot know. #}
+    <iframe title="{{ video.title if video else 'Video' }}"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+  {% endif %}
+  {% if chapters %}
+  <ol class="chapters" data-chapters>
+    {% for c in chapters %}
+      <li><button type="button" data-seek="{{ c.at }}"><span class="mono">{{ c.at | timecode }}</span> {{ c.title }}</button></li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  <p id="player-note" class="player-note" role="status" aria-live="polite" hidden></p>
+
+  <div class="player-meta">
+    <div>
+      <h1>{{ video.title if video else video_id }}</h1>
+      {% if video %}
+        <p class="lede">
+          <a href="/channels?q={{ video.author_id }}">{{ video.author or "Unknown channel" }}</a>
+          {%- if video.duration %} · <span class="mono">{{ video.duration | duration }}</span>{% endif %}
+          {%- if video.views %} · <span class="mono">{{ video.views | count }} view{{ '' if video.views == 1 else 's' }}</span>{% endif %}
+          {% if start %} · resumed at <span class="mono">{{ start | duration }}</span>{% endif %}
+        </p>
+      {% endif %}
+    </div>
+    <p class="wrap-actions" data-video="{{ video_id }}">
+      <button class="btn ghost" data-feedback="more" aria-pressed="{{ 'true' if feedback_now == 'more' else 'false' }}" title="Click again to undo">More like this</button>
+      <button class="btn ghost" data-feedback="less" aria-pressed="{{ 'true' if feedback_now == 'less' else 'false' }}" title="Click again to undo">Less like this</button>
+      <a class="btn ghost" href="/video/{{ video_id }}">Why this was recommended</a>
+    </p>
+<details class="explain" data-explain="{{ video_id }}">
+  <summary>Tell Sieve why{{ ' (in your own words)' }}</summary>
+  <textarea rows="2" placeholder="e.g. too much drama; I only want the technical parts"></textarea>
+  <p class="wrap-actions"><button class="btn" type="button">Send</button>
+    <span class="explain-result muted"></span></p>
+  <p class="hint">Changes what Sieve recommends from now on — for videos like this one, not only this one.</p>
+</details>
+  </div>
+
+  <div id="player-fallback" class="notice with-action" hidden>
+    <span>This video will not play here. Open it another way:</span>
+    <span class="wrap-actions">
+      {% for link in other_links %}
+        <a class="btn ghost" href="/open/{{ video_id }}?via={{ link.provider }}" rel="noreferrer noopener"
+           {% if not link.app %}target="_blank"{% endif %}>{{ link.label }}</a>
+      {% endfor %}
+    </span>
+  </div>
+
+  <details class="player-help">
+    <summary>How this player works</summary>
+    <p class="hint">Played with YouTube's privacy-enhanced player. Chosen sponsor segments are skipped.</p>
+  </details>
+</div>
+<script src="/static/player.js"></script>
+{% endblock %}

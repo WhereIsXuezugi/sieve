@@ -80,7 +80,8 @@ class ThumbnailScorer:
         self._client.close()
 
 
-def score_pending(db: Database, cfg: Config, limit: int = 200) -> dict[str, int]:
+def score_pending(db: Database, cfg: Config, limit: int = 200,
+                  thumbnail_url=None) -> dict[str, int]:
     """Score thumbnails for videos that have never been looked at.
 
     Results are written to ``videos.nsfw_vision`` and folded into the stored
@@ -97,10 +98,15 @@ def score_pending(db: Database, cfg: Config, limit: int = 200) -> dict[str, int]
         "SELECT id FROM videos WHERE nsfw_vision < 0 ORDER BY fetched_at DESC LIMIT ?",
         (limit,),
     )
-    base = cfg.instances[0].rstrip("/")
+    # Wherever thumbnails currently come from — the Invidious proxy or YouTube.
+    if thumbnail_url is None:
+        from .youtube import THUMBNAIL
+
+        def thumbnail_url(video_id: str) -> str:
+            return THUMBNAIL.format(id=video_id)
     scored = skipped = 0
     for row in rows:
-        value = scorer.score_url(f"{base}/vi/{row['id']}/mqdefault.jpg")
+        value = scorer.score_url(thumbnail_url(row["id"]))
         if value is None:
             skipped += 1
             continue

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Where should Sieve run?": two tappable choices, each with what it means,
+     instead of two bare buttons under a paragraph. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:id="@+id/option_local"
+        style="@style/Sieve.Option">
+        <ImageView style="@style/Sieve.Option.Icon" android:src="@drawable/ic_phone"
+            android:importantForAccessibility="no" />
+        <LinearLayout style="@style/Sieve.Option.Text">
+            <TextView style="@style/Sieve.Option.Title" android:text="@string/mode_local" />
+            <TextView style="@style/Sieve.Option.Description" android:text="@string/mode_local_desc" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/option_remote"
+        style="@style/Sieve.Option"
+        android:layout_marginTop="12dp">
+        <ImageView style="@style/Sieve.Option.Icon" android:src="@drawable/ic_server"
+            android:importantForAccessibility="no" />
+        <LinearLayout style="@style/Sieve.Option.Text">
+            <TextView style="@style/Sieve.Option.Title" android:text="@string/mode_remote" />
+            <TextView style="@style/Sieve.Option.Description" android:text="@string/mode_remote_desc" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/choose_hint"
+        android:textColor="@color/ink_3"
+        android:textSize="13sp" />
+</LinearLayout>

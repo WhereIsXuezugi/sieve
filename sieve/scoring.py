@@ -31,7 +31,7 @@ from typing import Any
 
 from . import textutil as T
 
-SCORER_VERSION = 4
+SCORER_VERSION = 5   # 5: channel prior, your corrections and overrides
 
 
 @dataclass
@@ -54,6 +54,8 @@ class ScoreCard:
     topics: list[str] = field(default_factory=list)
     vector: dict[str, float] = field(default_factory=dict)
     confidence: float = 0.5
+    # Scores before the channel prior and your corrections (see ingest).
+    base: dict[str, float] = field(default_factory=dict)
 
     def __getitem__(self, key: str) -> float:
         return self.scores.get(key, 50.0)
@@ -270,7 +272,19 @@ LABELS = {
     "ai_words": "declares AI generation",
     "entertainment_words": "entertainment vocabulary",
     "hobby_words": "hands-on hobby vocabulary",
+    "channel_prior": "this channel's other videos",
+    "title_len": "long title",
+    "fresh": "just published",
+    "your_corrections": "learned from scores you corrected",
+    "your_override": "you set this score",
 }
+
+# How far a channel's usual score pulls one video, in log-odds. A channel whose
+# other videos average 80 lifts a sparse video by up to ~1.1: enough to decide
+# a video whose own text says little, not enough to outvote one that says a lot.
+CHANNEL_PRIOR_WEIGHT = 1.1
+# A channel's average counts once it has this many scored videos.
+CHANNEL_PRIOR_MIN = 3
 
 TOPIC_LEXICONS = {
     "education": T.ACADEMIC,
@@ -290,8 +304,13 @@ def score_video(video: Mapping[str, Any], transcript: str = "",
     embedding model for the similarity vector. Omit it and the default hashed
     term vector is used, which is what every benchmark in the README assumes.
     """
+    extra = extra or {}
     features = extract_features(video, transcript, extra)
     card = ScoreCard(video_id=video["id"])
+    channel_means = extra.get("channel_means") or {}
+    correction_model = extra.get("correction_model") or {}
+    overrides = extra.get("overrides") or {}
+    correction_input = None
 
     for name, (bias, weights) in MODELS.items():
         signals = [
@@ -299,13 +318,37 @@ def score_video(video: Mapping[str, Any], transcript: str = "",
             for feature, weight in weights.items()
             if abs(features.get(feature, 0.0)) > 1e-6
         ]
-        card.scores[name] = _score(signals, bias)
-        card.signals[name] = signals
+        base = _score(signals, bias)
+        if name == "clickbait" and features.get("dearrow_retitled"):
+            # A crowd-corrected title is direct evidence: let it dominate.
+            base = max(base, 72.0)
+        card.base[name] = base
+        # The channel's usual score on this axis, as one explainable signal.
+        mean = channel_means.get(name)
+        if mean is not None:
+            signals.append(Signal("channel_prior", round((mean - 50.0) / 50.0, 4),
+                                  CHANNEL_PRIOR_WEIGHT, LABELS["channel_prior"]))
+        # What your own corrections taught it, as one more signal.
+        if correction_model.get(name):
+            from . import corrections
 
-    # A crowd-corrected title is direct evidence, so let it dominate rather than
-    # merely nudge the heuristic.
-    if features.get("dearrow_retitled"):
-        card.scores["clickbait"] = max(card.scores["clickbait"], 72.0)
+            if correction_input is None:
+                correction_input = corrections.inputs(video, features)
+            delta = corrections.predict(correction_model[name], correction_input)
+            if abs(delta) > 0.01:
+                signals.append(Signal("your_corrections", 1.0, round(delta, 3),
+                                      LABELS["your_corrections"]))
+        added = sum(s.contribution for s in signals if s.name in ("channel_prior", "your_corrections"))
+        card.scores[name] = round(100.0 * T.sigmoid(T.logit(base / 100.0) + added), 1) if added else base
+        # Your own value for this video wins outright.
+        if name in overrides:
+            # Keep what the engine predicted beside your value, so the page
+            # can show both; your value is the score used.
+            predicted = card.scores[name]
+            card.scores[name] = float(overrides[name])
+            signals.append(Signal("your_override", round(predicted / 100.0, 4), 0.0,
+                                  LABELS["your_override"]))
+        card.signals[name] = signals
 
     keywords = video["keywords"]
     if isinstance(keywords, str):
@@ -362,14 +405,14 @@ def card_to_row(card: ScoreCard) -> tuple:
         card.scores.get("ai_generated", 50), card.scores.get("nsfw", 0),
         card.scores.get("music", 0), card.scores.get("profanity", 0),
         json.dumps(card.topics), json.dumps({k: round(v, 5) for k, v in card.vector.items()}),
-        json.dumps(signals), int(time.time()),
+        json.dumps(signals), int(time.time()), json.dumps(card.base),
     )
 
 
 INSERT_SCORE = (
     "INSERT INTO scores(video_id, version, education, entertainment, stimulation, brainrot, "
     "clickbait, info_density, technical_depth, production, ai_generated, nsfw, music, profanity, "
-    "topics, vector, signals, computed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "topics, vector, signals, computed_at, base) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
     "ON CONFLICT(video_id) DO UPDATE SET version=excluded.version, education=excluded.education, "
     "entertainment=excluded.entertainment, stimulation=excluded.stimulation, "
     "brainrot=excluded.brainrot, clickbait=excluded.clickbait, info_density=excluded.info_density, "
@@ -377,7 +420,7 @@ INSERT_SCORE = (
     "ai_generated=excluded.ai_generated, nsfw=excluded.nsfw, music=excluded.music, "
     "profanity=excluded.profanity, "
     "topics=excluded.topics, vector=excluded.vector, signals=excluded.signals, "
-    "computed_at=excluded.computed_at"
+    "computed_at=excluded.computed_at, base=excluded.base"
 )
 
 

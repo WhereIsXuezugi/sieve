@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web app's dark palette (app.css, prefers-color-scheme: dark). -->
+<resources>
+    <color name="paper">#181B20</color>
+    <color name="surface">#212630</color>
+    <color name="sunken">#12151A</color>
+    <color name="ink">#E3E5E0</color>
+    <color name="ink_2">#A8AEB8</color>
+    <color name="ink_3">#7C838E</color>
+    <color name="rule">#343A45</color>
+    <color name="rule_2">#454C58</color>
+    <color name="indigo">#8C86FF</color>
+    <color name="on_indigo">#14161B</color>
+    <color name="clay">#E08065</color>
+</resources>

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Material 3, coloured with the web app's palette (values/colors.xml and
+         values-night/colors.xml). Every surface Material would tint is pinned
+         to the web's paper/surface so nothing native looks like a different app. -->
+    <style name="Theme.Sieve" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/indigo</item>
+        <item name="colorOnPrimary">@color/on_indigo</item>
+        <item name="colorPrimaryContainer">@color/sunken</item>
+        <item name="colorOnPrimaryContainer">@color/ink</item>
+        <item name="colorSecondary">@color/indigo</item>
+        <item name="colorOnSecondary">@color/on_indigo</item>
+        <item name="colorSecondaryContainer">@color/sunken</item>
+        <item name="colorOnSecondaryContainer">@color/ink</item>
+        <item name="colorTertiary">@color/indigo</item>
+        <item name="colorError">@color/clay</item>
+
+        <item name="android:colorBackground">@color/paper</item>
+        <item name="colorOnBackground">@color/ink</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorSurfaceVariant">@color/sunken</item>
+        <item name="colorOnSurfaceVariant">@color/ink_2</item>
+        <item name="colorSurfaceContainerLowest">@color/surface</item>
+        <item name="colorSurfaceContainerLow">@color/surface</item>
+        <item name="colorSurfaceContainer">@color/surface</item>
+        <item name="colorSurfaceContainerHigh">@color/surface</item>
+        <item name="colorSurfaceContainerHighest">@color/surface</item>
+        <item name="colorOutline">@color/rule_2</item>
+        <item name="colorOutlineVariant">@color/rule</item>
+        <item name="colorControlNormal">@color/ink_2</item>
+
+        <!-- The bars match the web page's header (surface) and body (paper). -->
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/surface</item>
+        <item name="android:navigationBarColor">@color/paper</item>
+        <item name="android:windowLightStatusBar">@bool/light_theme</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/light_theme</item>
+        <!-- Tells the WebView which theme the page's prefers-color-scheme is. -->
+        <item name="android:isLightTheme" tools:targetApi="29">@bool/light_theme</item>
+
+        <item name="actionBarStyle">@style/Widget.Sieve.ActionBar</item>
+        <item name="materialButtonStyle">@style/Widget.Sieve.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Sieve.Button.Outlined</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Sieve.Dialog</item>
+    </style>
+
+    <!-- The action bar reads as part of the page's header: same colour, no
+         shadow. -->
+    <style name="Widget.Sieve.ActionBar" parent="Widget.Material3.ActionBar.Solid">
+        <item name="background">@color/surface</item>
+        <item name="elevation">0dp</item>
+        <item name="titleTextStyle">@style/TextAppearance.Sieve.ActionBarTitle</item>
+    </style>
+    <style name="TextAppearance.Sieve.ActionBarTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <!-- The web app's .btn (indigo, 3px corners) and .btn.ghost (outlined). -->
+    <style name="Widget.Sieve.Button" parent="Widget.Material3.Button">
+        <item name="cornerRadius">3dp</item>
+    </style>
+    <style name="Widget.Sieve.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">3dp</item>
+        <item name="strokeColor">@color/rule_2</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <!-- In a dialog's button bar: the spacing and single line of Material's own
+         dialog buttons (Widget.Material3.Button.TextButton.Dialog). -->
+    <style name="Widget.Sieve.Button.Dialog">
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginLeft">8dp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+    <style name="Widget.Sieve.Button.Outlined.Dialog">
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginLeft">8dp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <!-- Dialogs: the web app's panels — surface colour, small corners, ink
+         text — with its buttons. -->
+    <style name="ThemeOverlay.Sieve.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.Sieve</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/MaterialAlertDialog.Sieve.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/MaterialAlertDialog.Sieve.Body</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Sieve.Button.Dialog</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Sieve.Button.Outlined.Dialog</item>
+    </style>
+    <style name="MaterialAlertDialog.Sieve" parent="MaterialAlertDialog.Material3">
+        <item name="backgroundTint">@color/surface</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Sieve.Dialog</item>
+    </style>
+    <style name="MaterialAlertDialog.Sieve.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="MaterialAlertDialog.Sieve.Body" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textColor">@color/ink_2</item>
+    </style>
+
+    <style name="ShapeAppearance.Sieve.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">8dp</item>
+    </style>
+    <style name="ShapeAppearance.Sieve.Small" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">3dp</item>
+    </style>
+</resources>

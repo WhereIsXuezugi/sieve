@@ -49,7 +49,9 @@ What is on my homepage, and why?
 curl -s localhost:8377/api/recommendations?limit=3 | jq '.items[] | {title, explanation}'
 ```
 
-Each item carries the same `explanation` the why-bar draws — components with
+Each item has `open_url` — Sieve's own link, which records that you opened it
+and redirects to your provider — and `links`, the direct URL for every provider
+you can use, default first. Each item also carries the same `explanation` the why-bar draws — components with
 percentages that sum to 100 — plus the raw `components`, every content score,
 and the channel `notes` behind the channel component. The response's
 `diagnostics` holds the pool size, the rejection tally with reasons, topic
@@ -86,6 +88,42 @@ curl -s -X POST localhost:8377/api/settings \
 `playlist` accepts a bare id or any URL containing `list=`. Importing a playlist
 that is already imported refreshes it.
 
+Open videos in Piped rather than Invidious, and see where one would go:
+
+```bash
+curl -s -X POST localhost:8377/api/settings -H 'Content-Type: application/json' \
+     -d '{"playback": {"provider": "piped", "piped_url": "https://piped.example.org"}}'
+
+curl -s localhost:8377/api/videos/dQw4w9WgXcQ/links | jq '.links[] | {provider, url}'
+```
+
+A bad playback value is a `400` with the reason — for instance a custom
+template without `{id}`, or one starting with `javascript:`.
+
+Run your algorithm over a channel, and see what it threw out and why:
+
+```bash
+curl -s -X POST localhost:8377/api/sift -H 'Content-Type: application/json' \
+     -d '{"query": "https://www.youtube.com/@3blue1brown"}' \
+  | jq '{label, fetched, top: [.items[:5][] | .title], rejected: [.ledger[] | select(.stage=="rejected") | {title, reason}]}'
+```
+
+The whole funnel of your homepage, without adding impressions:
+
+```bash
+curl -s 'localhost:8377/api/funnel?stage=ranked' | jq '.entries[] | {title, reason}'
+```
+
+Start over. The word `reset` is required, and a backup is written first:
+
+```bash
+curl -s -X POST localhost:8377/api/reset -H 'Content-Type: application/json' \
+     -d '{"scope": "everything", "confirm": "reset"}' | jq '{rows, backup}'
+```
+
+`catalogue` instead of `everything` deletes only the videos and what was
+computed from them, keeping your subscriptions, history and settings.
+
 ---
 
 ## Endpoints
@@ -101,6 +139,20 @@ that is already imported refreshes it.
 | `GET` | `/api/recommendations` `?limit&mood&refresh` | The homepage, as data |
 | `GET` | `/api/sponsorblock/{video_id}` | SponsorBlock segments for a video, and which to skip |
 | `GET` | `/api/videos/{video_id}` | One video, with its full score breakdown |
+| `GET` | `/api/videos/{video_id}/links` `?t` | Where a video can be opened, per provider |
+| `GET` | `/api/providers` | Every provider, and how each is configured |
+
+### Sift, funnel and records
+
+| Method | Path | Does |
+|---|---|---|
+| `POST` | `/api/sift` | Run the algorithm over a search, channel, playlist or video |
+| `GET` | `/api/funnel` `?stage&limit` | Every candidate for the homepage and what became of it |
+| `GET` | `/api/records/{kind}` `?limit&offset&video_id` | Your watch history, opens or feedback, newest first |
+| `DELETE` | `/api/records/{kind}/{record}` | Delete one record |
+| `POST` | `/api/records/{kind}/forget` | Delete every record of one kind |
+
+`kind` is `watches`, `opens` or `feedback`.
 
 ### Settings and moods
 
@@ -179,9 +231,50 @@ that is already imported refreshes it.
 | `GET` | `/api/analytics` `?days` | Watch time, completion, channels, trends |
 | `GET` | `/api/doctor` `?quick` | Why is my homepage empty |
 | `POST` | `/api/maintenance/prune` | Drop stale rows and vacuum |
+| `POST` | `/api/reset` | Delete every video, or factory-reset everything |
+| `GET` | `/api/backups` | Backups written before each reset, newest first |
 | `POST` | `/api/score` | Score unscored videos, or rescore everything |
 | `GET` | `/api/status` | Counts, sync state, configured services |
 | `POST` | `/api/sync` `?deep` | Pull recent videos now, then rescore and rederive |
+| `POST` | `/api/fetch` | Find videos for your topics now |
+| `GET` | `/api/fetch/progress` | What a running fetch or sync is doing |
+| `POST` | `/api/ai/tune` | Let the AI tune scores, targets and weights now |
+| `POST` | `/api/ai/tune/undo` | Undo everything the AI tuning changed |
+| `POST` | `/api/notices/{key}/dismiss` | Dismiss a notice or banner |
+| `GET` | `/api/problems` | Recent backend problems, explained |
+| `POST` | `/api/homepage/search` | Find videos on your homepage |
+| `POST` | `/api/videos/{video_id}/explain` | Tell Sieve in words why (not) this video |
+| `GET` | `/api/scales/{key}/range` | Every score on one axis, and the videos at one |
+| `GET` | `/api/ai` | The AI connection |
+| `POST` | `/api/ai/key` | Store the AI provider's API key |
+| `DELETE` | `/api/ai/key` | Forget the AI provider's API key |
+| `POST` | `/api/ai/test` | Check the AI connection answers |
+| `GET` | `/api/library/search` `?q&unwatched&min_duration&max_duration&channel` | Search your own catalogue by meaning |
+| `GET` | `/api/videos/{video_id}/notes` | Your notes on a video |
+| `POST` | `/api/videos/{video_id}/notes` | Add a note, optionally at a moment |
+| `DELETE` | `/api/notes/{note_id}` | Delete a note |
+| `GET` | `/api/export/notes` `?format&watched` | Export notes to Obsidian, Logseq or Readwise |
+| `POST` | `/api/downloads` | Save a video for offline viewing |
+| `GET` | `/api/downloads` | Saved and queued videos |
+| `DELETE` | `/api/downloads/{video_id}` | Delete a saved video |
+| `POST` | `/api/channels/{channel_id}/alert` | Alerts for a channel's new uploads |
+| `GET` | `/api/alerts` | New uploads from alerted channels |
+| `POST` | `/api/alerts/seen` | Mark every alert as seen |
+| `GET` | `/api/digest` | The latest digest |
+| `POST` | `/api/digest` | Write a digest now (and send it, if a webhook is set) |
+| `POST` | `/api/notify/test` | Send a test message to your webhook |
+| `POST` | `/api/source/cookies` | Sign yt-dlp in: upload YouTube cookies |
+| `DELETE` | `/api/source/cookies` | Forget the uploaded YouTube cookies |
+| `GET` | `/api/scales/{key}` | What a slider's numbers mean |
+| `POST` | `/api/reevaluate` | Re-check every video against your current settings |
+| `PUT` | `/api/videos/{video_id}/scores` | Correct a video's scores |
+| `GET` | `/api/pulls` | Pulls made to YouTube or Invidious, and the limit |
+| `POST` | `/api/pulls/reset` | Forget recorded pulls, so the pull limit starts from zero |
+| `POST` | `/api/catalogue/reset-pulled` | Delete the videos Sieve found for you, and start finding over |
+| `POST` | `/api/backups` | Back up the database now |
+| `DELETE` | `/api/backups/{name}` | Delete one backup |
+| `POST` | `/api/backups/{name}/restore` | Roll back to a backup, in place |
+| `POST` | `/api/catalogue/remove-demo` | Delete the synthetic demo catalogue and what was learned from it |
 | `POST` | `/api/vision/scan` `?limit` | Score thumbnails for visual NSFW (optional extra) |
 
 ### Request bodies
@@ -208,6 +301,10 @@ has the full schemas.
 | `POST /api/profile/fetch` | `{"url", "merge": true}` |
 | `PUT /api/profiles/{name}` | optional `{"author"}` |
 | `POST /api/score` | optional `{"all": false, "limit": 200, "transcripts": true}` |
+| `POST /api/sift` | `{"query": "…", "kind": "auto", "filters": true}` — `kind` is `auto`, `search`, `channel`, `playlist`, `video` or `interests`; an empty query with `interests` searches for what you like |
+| `POST /api/records/{kind}/forget` | `{"confirm": "forget"}` |
+| `POST /api/progress` with a session | `{"video_id", "progress", "session"}` — reports from one viewing update one history row |
+| `POST /api/reset` | `{"scope": "catalogue" or "everything", "confirm": "reset"}`, optional `"backup": true` |
 
 The two file imports take a multipart field called `file`:
 
@@ -276,6 +373,15 @@ curl -s localhost:8377/api/channels | jq -r '.channels[] | [.name, .affinity, .q
 
 ```bash
 curl -s 'localhost:8377/api/doctor?quick=false' | jq '{problems, services}'
+```
+
+**Let it find videos on its own, but never more than 200 requests a day**
+
+```bash
+curl -s -X POST localhost:8377/api/settings -H 'Content-Type: application/json' \
+     -d '{"pull": {"auto": true, "topics": ["science", "history"],
+          "limit_enabled": true, "limit_count": 200, "limit_window": 1440}}'
+curl -s localhost:8377/api/pulls | jq '{used, limit, window, by_kind}'
 ```
 
 **Try a rule against my real catalogue before saving it**

@@ -15,6 +15,7 @@ from sieve import actions, channels, ranking, scoring
 from sieve.app import create_app
 from sieve.config import Config, config_path, default_data_dir, resolve_settings
 from sieve.db import Database
+from tests.support import offline_config
 
 
 def make_video(vid, **overrides):
@@ -249,7 +250,7 @@ def test_the_database_creates_its_own_directory(tmp_path):
 
 
 def test_create_app_works_from_a_hand_built_config(tmp_path):
-    app = create_app(Config(data_dir=str(tmp_path / "fresh" / "dir")), start_worker=False)
+    app = create_app(offline_config(tmp_path / "fresh" / "dir"), start_worker=False)
     assert TestClient(app).get("/api/status").status_code == 200
 
 
@@ -258,7 +259,7 @@ def test_create_app_works_from_a_hand_built_config(tmp_path):
 
 @pytest.fixture()
 def client(tmp_path):
-    cfg = Config(data_dir=str(tmp_path), instances=["http://127.0.0.1:9"], request_timeout=1)
+    cfg = offline_config(tmp_path)
     return TestClient(create_app(cfg, start_worker=False))
 
 

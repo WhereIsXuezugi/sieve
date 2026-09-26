@@ -25,7 +25,15 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
+
+try:
+    from pydantic import field_validator
+except ImportError:   # pydantic 1: the Android build uses it (pure Python, no Rust core)
+    from pydantic import validator as _validator
+
+    def field_validator(*fields, mode="after"):
+        return _validator(*fields, pre=(mode == "before"), allow_reuse=True)
 
 from . import (
     actions,
@@ -33,6 +41,7 @@ from . import (
     ingest,
     llm,
     profiles,
+    providers,
     ranking,
     scoring,
 )
@@ -50,8 +59,20 @@ from . import (
 )
 from .config import SCORE_KEYS, resolve_settings
 from .doctor import doctor_report
-from .invidious import InvidiousUnavailable
+from .invidious import UpstreamUnavailable
 from .present import candidate_json
+
+
+async def json_object(request: Request) -> dict:
+    """The request body as a JSON object, or a 400 that says what was wrong.
+    Reading it directly turned an empty, non-JSON or list body into a 500."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "send a JSON object as the request body") from None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "the request body must be a JSON object, like {\"key\": value}")
+    return body
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -62,8 +83,8 @@ def _state(request: Request):
 
 def _fail(exc: Exception) -> HTTPException:
     """Map a domain failure to the right status, keeping its message."""
-    if isinstance(exc, InvidiousUnavailable):
-        return HTTPException(502, f"Invidious did not answer: {exc}")
+    if isinstance(exc, UpstreamUnavailable):
+        return HTTPException(502, f"No backend could answer — Invidious or YouTube: {exc}")
     return HTTPException(400, str(exc))
 
 
@@ -110,6 +131,25 @@ class ChannelListsBody(BaseModel):
         return out
 
 
+class SiftBody(BaseModel):
+    query: str = Field("", description="A search, or a channel, playlist or video address. "
+                                       "Empty means: search for my interests")
+    kind: str = Field("auto", description="auto, search, channel, playlist, video or interests")
+    limit: int | None = Field(None, ge=1, le=300, description="Defaults to the compute setting")
+    filters: bool = Field(True, description="Apply my filters and rules, or rank everything")
+
+
+class ForgetBody(BaseModel):
+    confirm: str = Field(..., description='Must be the word "forget"')
+
+
+class ResetBody(BaseModel):
+    scope: str = Field(..., description="'catalogue' deletes every video and what was computed "
+                                        "from them; 'everything' is a factory reset")
+    confirm: str = Field(..., description='Must be the word "reset"')
+    backup: bool = Field(True, description="Write a backup first. Leave this on")
+
+
 class ScoreBody(BaseModel):
     all: bool = Field(False, description="Rescore everything, not just what is unscored")
     limit: int = Field(200, ge=1, le=5000)
@@ -131,6 +171,8 @@ class ProgressBody(BaseModel):
     video_id: str
     progress: float = Field(..., ge=0, le=1, description="Fraction watched, 0 to 1")
     dwell: int = Field(0, description="Seconds on the page, if known")
+    session: str | None = Field(None, description="One id per viewing; repeated reports "
+                                                  "with it update one history row")
 
 
 class HideBody(BaseModel):
@@ -154,6 +196,14 @@ class InterestBody(BaseModel):
     confidence: float = Field(1.0, ge=0, le=1)
 
 
+class FetchBody(BaseModel):
+    topics: list[str] | None = Field(None, description="Topic keys; default: the ones chosen in Controls")
+
+
+class RestoreBody(BaseModel):
+    confirm: str = Field(..., description='Must be the word "restore"')
+
+
 class RuleBody(BaseModel):
     expr: dict | str = Field(..., description="A rule tree, or the same as a JSON string")
     enabled: bool = True
@@ -172,13 +222,14 @@ class ProfileFetchBody(BaseModel):
 def documented(model: type[BaseModel], example: dict) -> dict[str, Any]:
     """OpenAPI metadata describing a JSON body a handler reads itself.
 
-    Several older endpoints parse `await request.json()` directly, with
+    Several older endpoints parse `await json_object(request)` directly, with
     validation and error messages the tests already pin down. Converting them
     to typed parameters would change those behaviours; this documents the
     contract in /api/docs without touching them.
     """
     return {"requestBody": {"required": True, "content": {"application/json": {
-        "schema": model.model_json_schema(), "example": example}}}}
+        "schema": (model.model_json_schema() if hasattr(model, "model_json_schema")
+                   else model.schema()), "example": example}}}}
 
 
 # --------------------------------------------------------------------------
@@ -198,14 +249,50 @@ def recommendations(request: Request,
     settings = actions.resolved_settings(state.db)
     if mood:
         settings = resolve_settings({**actions.stored_settings(state.db), "active_mood": mood})
-    result = ranking.recommend(
-        state.db, settings, limit=limit,
+    result = ranking.homepage(
+        state.db, settings, limit=limit, mood=bool(mood),
         seed=int(time.time()) if refresh else None, community=state.community,
     )
     return {
         "items": [candidate_json(state.cfg, c, settings, i) for i, c in enumerate(result.items)],
         "diagnostics": result.diagnostics,
         "mood": settings.get("active_mood", ""),
+    }
+
+
+@router.get("/videos/{video_id}/links", summary="Where a video can be opened, per provider")
+def video_links(request: Request, video_id: str, t: int | None = Query(None, ge=0)):
+    """Direct provider URLs, default first. `open_url` is Sieve's own link,
+    which also records that you opened the video. A video no provider can
+    play — the demo catalogue — has `playable: false` and no links."""
+    state = _state(request)
+    settings = actions.resolved_settings(state.db)
+    playable = providers.playable(video_id)
+    return {
+        "video_id": video_id,
+        "playable": playable,
+        "default": providers.default_provider(settings, state.cfg) if playable else None,
+        "open_url": f"/open/{video_id}",
+        "links": providers.links(video_id, settings, state.cfg, t),
+    }
+
+
+@router.get("/providers", summary="Every provider, and how each is configured")
+def get_providers(request: Request):
+    state = _state(request)
+    settings = actions.resolved_settings(state.db)
+    usable = set(providers.available(settings, state.cfg))
+    return {
+        "default": providers.default_provider(settings, state.cfg),
+        "providers": [
+            {"key": p.key, "label": p.label, "note": p.note, "app": p.app,
+             "usable": p.key in usable,
+             "test_url": providers.url_for(p.key, providers.TEST_VIDEO, settings, state.cfg)
+                         if p.key in usable else None}
+            for p in providers.PROVIDERS.values()
+        ],
+        "playback": settings["playback"],
+        "invidious_base": providers.invidious_base(settings, state.cfg),
     }
 
 
@@ -231,6 +318,7 @@ def video(request: Request, video_id: str):
         "topics": card.topics if card else [],
         "last_explanation": json.loads(impression["reason"]) if impression else None,
         "sponsorblock": state.community.segments_for(video_id),
+        "links": providers.links(video_id, actions.resolved_settings(state.db), state.cfg),
         "channel_policy": dict(pref) if pref else None,
         "history": [dict(r) for r in state.db.query(
             "SELECT watched_at, progress FROM history WHERE video_id = ? ORDER BY watched_at DESC",
@@ -433,7 +521,7 @@ def import_playlist(request: Request, body: PlaylistBody):
     try:
         playlist_id = actions.parse_playlist_ref(body.playlist or body.playlist_id)
         count = ingest.import_playlist(state.db, state.api, playlist_id)
-    except (actions.ActionError, InvidiousUnavailable) as exc:
+    except (actions.ActionError, UpstreamUnavailable) as exc:
         raise _fail(exc) from None
     row = state.db.one("SELECT title FROM playlists WHERE id = ?", (playlist_id,))
     if count == 0:
@@ -512,6 +600,89 @@ def score(request: Request, body: ScoreBody | None = None):
         if done == 0:
             break
     return {"ok": True, "scored": total}
+
+
+@router.post("/sift", summary="Run the algorithm over a search, channel, playlist or video")
+def sift_endpoint(request: Request, body: SiftBody):
+    """Fetches the source, scores what it finds, and ranks it with your whole
+    configuration. `items` are ranked and explained like the homepage;
+    `ledger` has every fetched video and what became of it."""
+    from . import sift
+
+    state = _state(request)
+    settings = actions.resolved_settings(state.db)
+    try:
+        out = sift.run(state.db, state.api, settings, body.query, body.kind, body.limit,
+                       body.filters, state.community)
+    except (actions.ActionError, UpstreamUnavailable) as exc:
+        raise _fail(exc) from None
+    result = out.pop("result")
+    return {**out, "items": [candidate_json(state.cfg, c, settings, i) for i, c in enumerate(result.items)],
+            "diagnostics": result.diagnostics, "ledger": result.ledger}
+
+
+@router.get("/funnel", summary="Every candidate for the homepage and what became of it")
+def funnel(request: Request, stage: str = "", limit: int = Query(2000, ge=1, le=10000)):
+    """The whole funnel of one homepage render: `shown` (on the page, with
+    its slot), `ranked` (scored but left off, with why), `rejected` (with the
+    reason). Looking does not count as being shown: no impressions recorded."""
+    state = _state(request)
+    result = ranking.recommend(state.db, actions.resolved_settings(state.db),
+                               community=state.community, record=False, ledger=True)
+    entries = result.ledger or []
+    counts = {k: sum(1 for e in entries if e["stage"] == k) for k in ("shown", "ranked", "rejected")}
+    if stage:
+        if stage not in counts:
+            raise HTTPException(400, "stage must be shown, ranked or rejected")
+        entries = [e for e in entries if e["stage"] == stage]
+    return {"counts": counts, "total": sum(counts.values()), "entries": entries[:limit],
+            "diagnostics": result.diagnostics}
+
+
+@router.get("/records/{kind}", summary="Your watch history, opens or feedback, newest first")
+def records(request: Request, kind: str, limit: int = Query(100, ge=1, le=1000),
+            offset: int = Query(0, ge=0), video_id: str = ""):
+    try:
+        return actions.list_records(_state(request).db, kind, limit, offset, video_id)
+    except actions.ActionError as exc:
+        raise _fail(exc) from None
+
+
+@router.delete("/records/{kind}/{record}", summary="Delete one record")
+def delete_record(request: Request, kind: str, record: int):
+    try:
+        found = actions.delete_record(_state(request).db, kind, record)
+    except actions.ActionError as exc:
+        raise _fail(exc) from None
+    if not found:
+        raise HTTPException(404, "no such record")
+    return {"ok": True}
+
+
+@router.post("/records/{kind}/forget", summary="Delete every record of one kind")
+def forget(request: Request, kind: str, body: ForgetBody):
+    """Requires `"confirm": "forget"`. Forgetting watches also rebuilds the
+    interests and channel affinity derived from them."""
+    try:
+        return {"ok": True, "deleted": actions.forget_records(_state(request).db, kind, body.confirm)}
+    except actions.ActionError as exc:
+        raise _fail(exc) from None
+
+
+@router.post("/reset", summary="Delete every video, or factory-reset everything")
+def reset(request: Request, body: ResetBody):
+    """Requires `"confirm": "reset"`, so a stray request cannot erase anything.
+    A backup is written first unless you turn it off; see `GET /api/backups`."""
+    try:
+        return {"ok": True, **actions.reset(_state(request).db, body.scope, body.confirm, body.backup)}
+    except actions.ActionError as exc:
+        raise _fail(exc) from None
+
+
+@router.get("/backups", summary="Backups written before each reset, newest first")
+def backups(request: Request):
+    return {"backups": actions.list_backups(_state(request).db),
+            "kept": actions.BACKUPS_KEPT}
 
 
 @router.post("/maintenance/prune", summary="Drop stale rows and vacuum")

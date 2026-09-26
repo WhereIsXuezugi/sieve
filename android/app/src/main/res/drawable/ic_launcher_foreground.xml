@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher mark (drawable/ic_launcher.xml) without its circle, centred
+     in the 108dp adaptive-icon canvas; the indigo is the icon's background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:translateX="24" android:translateY="24" android:scaleX="1.25" android:scaleY="1.25">
+        <path android:fillColor="#FFFFFF" android:pathData="M11,19h26c0,8 -5.8,14 -13,14s-13,-6 -13,-14z" />
+        <path android:strokeColor="#3F3AA8" android:strokeWidth="1.4"
+              android:pathData="M15,23h18M13.5,27h21M18,20v11M24,20v13M30,20v11" />
+        <path android:fillColor="#FFFFFF" android:pathData="M37,20.5l5,-2.5v2.4l-5,2.3z" />
+    </group>
+</vector>

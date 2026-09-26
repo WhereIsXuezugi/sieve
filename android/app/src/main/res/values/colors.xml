@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web app's palette (sieve/static/app.css, :root), so the native parts
+     around the WebView look like the same app. Dark values: values-night. -->
+<resources>
+    <color name="paper">#E7E8E3</color>
+    <color name="surface">#F5F5F2</color>
+    <color name="sunken">#DDDFD8</color>
+    <color name="ink">#1C2128</color>
+    <color name="ink_2">#4D545E</color>
+    <color name="ink_3">#767D86</color>
+    <color name="rule">#C8CAC2</color>
+    <color name="rule_2">#B3B6AC</color>
+    <color name="indigo">#3F3AA8</color>
+    <color name="on_indigo">#FFFFFF</color>
+    <color name="clay">#9C3B25</color>
+    <!-- Fixed, not themed: the launcher icon is the same in light and dark. -->
+    <color name="launcher_background">#3F3AA8</color>
+</resources>
