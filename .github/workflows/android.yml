@@ -70,7 +70,7 @@ jobs:
             [ -n "$version" ] || { echo "versionName not found"; exit 1; }
             echo "name=v${version}" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sieve-android
           path: sieve-android.apk
